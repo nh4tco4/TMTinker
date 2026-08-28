@@ -1,0 +1,22 @@
+// #[derive(serde::Deserialize, serde::Serialize, PartialEq, Eq, Debug, Clone, Copy)]
+// pub enum Tool {
+//     Left,
+//     Note,
+//     Right,
+//     LeftWord,
+//     RightWord,
+//     Lambda,
+//     Submachine,
+//     Delete,
+//     Move,
+//     Link,
+//     Start,
+//     End,
+//     Copy,
+//     DeleteWordLeft,
+//     DeleteWordRight,
+//     SkipSequenceLeft,
+//     SkipSequenceRight,
+//     ShiftOneWordBackwards,
+//     CopyNthWord,
+// }
