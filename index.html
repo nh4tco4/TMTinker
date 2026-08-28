@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+    <meta
+        http-equiv="Content-Security-Policy"
+        content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self';"
+    />
+    <head>
+        
+        <link rel="icon" href="favicon.ico" />
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Turing Machine Diagram</title>
+        <style>
+            html,
+            body {
+                margin: 0;
+                padding: 0;
+                overflow: hidden;
+                background: #1a1a2e;
+            }
+
+            /* Full-screen canvas */
+            canvas {
+                display: block;
+                width: 100vw;
+                height: 100vh;
+            }
+
+            /* Loading overlay */
+            #loading_text {
+                position: fixed;
+                inset: 0;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                flex-direction: column;
+                gap: 16px;
+                color: #e0e0e0;
+                font-family: sans-serif;
+                font-size: 1.2rem;
+                background: #1a1a2e;
+                z-index: 10;
+            }
+
+            .spinner {
+                width: 48px;
+                height: 48px;
+                border: 4px solid rgba(255, 255, 255, 0.15);
+                border-top-color: #7c9bff;
+                border-radius: 50%;
+                animation: spin 0.8s linear infinite;
+            }
+
+            @keyframes spin {
+                to {
+                    transform: rotate(360deg);
+                }
+            }
+        </style>
+    <link rel="modulepreload" href="https://nh4tco4.github.io/TMTinker/tmtinker.js" crossorigin="anonymous" integrity="sha384-B0s6ME4UICw9/Y6ltcsx1I4vlvCNlcImNyzO9Zm9uneJzFDEOmViCHbFBZlX97dW"><link rel="preload" href="https://nh4tco4.github.io/TMTinker/tmtinker_bg.wasm" crossorigin="anonymous" integrity="sha384-47JGjTlqeUgu9KyKZlJWj02sLdJMaiqfyrdFykYqYRe4fslV3dPgpbFBQw8MrEcQ" as="fetch" type="application/wasm"></head>
+    <body>
+        <!-- The egui canvas -->
+        <canvas id="the_canvas_id"></canvas>
+
+        <!-- Shown until the WASM module is ready -->
+        <div id="loading_text">
+            <div class="spinner"></div>
+            <span>Loading Turing Machine…</span>
+        </div>
+
+        <!-- Trunk injects the WASM loader here -->
+        
+<script type="module">
+import init, * as bindings from 'https://nh4tco4.github.io/TMTinker/tmtinker.js';
+const wasm = await init({ module_or_path: 'https://nh4tco4.github.io/TMTinker/tmtinker_bg.wasm' });
+
+
+window.wasmBindings = bindings;
+
+
+dispatchEvent(new CustomEvent("TrunkApplicationStarted", {detail: {wasm}}));
+
+</script>
+    </body>
+</html>
