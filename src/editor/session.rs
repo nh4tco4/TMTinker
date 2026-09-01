@@ -60,7 +60,7 @@ impl SelectionState {
         self.selected.clear();
         self.selected.push(id);
     }
-    
+
     pub fn single_note(&self) -> Option<NoteKey> {
         if self.selected.len() == 1 {
             match self.selected[0] {
@@ -108,8 +108,8 @@ impl SelectionState {
 pub struct Zoom(f32);
 
 impl Zoom {
-    const MAX: f32 = 15.0;
-    const MIN: f32 = 0.5;
+    const MAX: f32 = 10.0;
+    const MIN: f32 = 0.25;
     pub const UNIT: Zoom = Zoom(1.0);
 
     pub fn new(value: f32) -> Self {
