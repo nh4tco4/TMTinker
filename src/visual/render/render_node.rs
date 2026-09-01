@@ -1,12 +1,12 @@
 use egui::{Color32, Painter, Rect, Shape, Vec2, epaint::RectShape};
 
 use crate::{
-    core::tm::{NodeKey, Submachine},
-    diagram::model::node::{Direction, NodeAction},
-    editor::{
-        layout::GraphLayout,
-        session::{SelectableKey, SelectionState, ViewportState},
+    diagram::model::{
+        node::{Direction, NodeAction},
+        submachine::{NodeKey, Submachine},
     },
+    diagram::editor::session::{SelectableKey, SelectionState, ViewportState},
+    editor::layout::GraphLayout,
     visual::mappings::{
         BUTTON_CORNER_RADIUS, ICON_FONT_SIZE, IDLE_NODE_FILL, IDLE_NODE_STROKE, NODE_END,
         NODE_LEFT, NODE_RIGHT, NODE_SIZE, NODE_SPACE, NODE_START, NODE_STROKE_WIDTH,

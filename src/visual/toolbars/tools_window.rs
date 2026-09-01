@@ -1,5 +1,5 @@
 use crate::{
-    core::tm::SubmachineKey, project::Project, visual::{
+    diagram::model::submachine::SubmachineKey, project::Project, visual::{
         mappings::{
             BUTTON_CORNER_RADIUS, BUTTON_SIZE, BUTTON_STROKE_WIDTH, ICON_FONT_SIZE, SELECTED_NODE_STROKE, SUBSCRIPT_FONT_SIZE, TOOL_DELETE, TOOL_END, TOOL_LEFT, TOOL_LINK, TOOL_MOVE, TOOL_PLACE_SIGN, TOOL_RIGHT, TOOL_START,
         }, router::ToolState, tools::dyn_tools_base::{BasicActionTools, EditTools, EditorTool}, utils::shortcuts::*,

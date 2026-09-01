@@ -1,9 +1,9 @@
 use egui::Pos2;
 
 use crate::{
-    core::tm::NodeKey,
-    diagram::model::transition::TransitionSymbols,
-    editor::{layout::NoteKey, session::SelectableKey},
+    diagram::model::{submachine::NodeKey, transition::TransitionSymbols},
+    diagram::editor::session::SelectableKey,
+    editor::layout::NoteKey,
     project::{SubmachineDocument, alphabet::ValidatedAlphabet},
 };
 

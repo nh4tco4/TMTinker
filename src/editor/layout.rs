@@ -4,7 +4,7 @@ use slotmap::SecondaryMap;
 use serde::{Deserialize, Serialize};
 use slotmap::{SlotMap, new_key_type};
 
-use crate::core::tm::NodeKey;
+use crate::diagram::model::submachine::NodeKey;
 
 new_key_type! {
     pub struct NoteKey;

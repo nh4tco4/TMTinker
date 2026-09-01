@@ -1,4 +1,3 @@
-pub mod tm;
 mod tmcore;
 
 pub use tmcore::TMCore;

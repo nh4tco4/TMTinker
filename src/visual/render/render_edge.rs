@@ -1,12 +1,9 @@
 use egui::{Painter, Pos2};
 
 use crate::{
-    core::tm::Submachine,
-    diagram::model::transition::TransitionSymbols,
-    editor::{
-        layout::GraphLayout,
-        session::{SelectableKey, SelectionState, ViewportState},
-    },
+    diagram::model::{submachine::Submachine, transition::TransitionSymbols},
+    diagram::editor::session::{SelectableKey, SelectionState, ViewportState},
+    editor::layout::GraphLayout,
     visual::mappings::{
         BUTTON_SIZE,
         ICON_FONT_SIZE,

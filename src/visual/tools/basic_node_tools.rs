@@ -1,11 +1,11 @@
 use egui::Pos2;
 
 use crate::{
-    core::{
-        NonZeroU32,
-        tm::{NodeKey, SubmachineKey},
+    core::NonZeroU32,
+    diagram::model::{
+        node::{Direction, NodeAction},
+        submachine::{NodeKey, SubmachineKey},
     },
-    diagram::model::node::{Direction, NodeAction},
     project::SubmachineDocument,
 };
 

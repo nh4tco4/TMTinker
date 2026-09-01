@@ -4,12 +4,11 @@ use egui::{
 };
 
 use crate::{
-    core::{
-        NonZeroU32,
-        tm::{NodeKey, NodeProblem, Submachine},
-    },
+    core::NonZeroU32,
     diagram::model::node::{Direction, Node, NodeAction},
-    editor::{layout::LayoutPos, session::ViewportState},
+    diagram::model::submachine::{NodeKey, NodeProblem, Submachine},
+    diagram::editor::session::ViewportState,
+    editor::layout::LayoutPos,
     project::alphabet::ValidatedAlphabet,
     visual::{
         mappings::{NODE_SIZE, descriptions::*},

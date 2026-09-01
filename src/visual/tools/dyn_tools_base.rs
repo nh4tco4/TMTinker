@@ -1,4 +1,4 @@
-use crate::core::tm::SubmachineKey;
+use crate::diagram::model::submachine::SubmachineKey;
 
 #[derive(PartialEq, Clone, Debug)]
 pub enum EditorTool {

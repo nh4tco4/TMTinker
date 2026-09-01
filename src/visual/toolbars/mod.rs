@@ -5,7 +5,7 @@ pub mod tape_window;
 pub mod tools_window;
 pub mod edge_control_window;
 
-use crate::core::tm::SubmachineKey;
+use crate::diagram::model::submachine::SubmachineKey;
 
 pub enum Page {
     Tinkering(SubmachineKey),

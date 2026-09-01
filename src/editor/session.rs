@@ -1,7 +1,7 @@
 use egui::Vec2;
 
 use crate::{
-    core::tm::NodeKey,
+    diagram::model::submachine::NodeKey,
     diagram::model::transition::EdgeKey,
     editor::layout::{LayoutPos, NoteKey},
 };

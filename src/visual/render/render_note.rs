@@ -1,7 +1,7 @@
 use egui::{Color32, Painter, Shape, epaint::RectShape};
 
 use crate::{
-    editor::{layout::GraphLayout, session::ViewportState}, visual::mappings::{
+    diagram::editor::session::ViewportState, editor::layout::GraphLayout, visual::mappings::{
         IDLE_NODE_FILL, IDLE_NODE_STROKE, NODE_STROKE_WIDTH, SELECTED_NODE_FILL,
         SELECTED_NODE_STROKE,
     },

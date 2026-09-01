@@ -1,9 +1,11 @@
 use egui::{Id, TextEdit, text::{CCursor, CCursorRange}};
 
 use crate::{
-    core::tm::Submachine,
-    diagram::model::transition::{Edge, EdgeKey, TransitionSymbols, TransitionSymbolsError},
-    editor::session::ViewportState,
+    diagram::model::{
+        submachine::Submachine,
+        transition::{Edge, EdgeKey, TransitionSymbols, TransitionSymbolsError},
+    },
+    diagram::editor::session::ViewportState,
     project::alphabet::ValidatedAlphabet,
 };
 

@@ -1,7 +1,7 @@
 use egui::{Painter, Rect};
 
 use crate::{
-    editor::{layout::{GraphLayout, LayoutPos}, session::ViewportState}, visual::mappings::{CANVAS_BACKGROUND, CANVAS_GRID},
+    diagram::editor::session::ViewportState, editor::layout::{GraphLayout, LayoutPos}, visual::mappings::{CANVAS_BACKGROUND, CANVAS_GRID},
 };
 
 pub fn render_grid(viewport: &ViewportState, rect: Rect, painter: &Painter) {

@@ -1,9 +1,8 @@
 use egui::{Pos2, Rect, Vec2};
 
 use crate::{
-    core::tm::Submachine, editor::{
-        layout::{GraphLayout, LayoutPos}, session::{CanvasInteractionState, RectSelection, SelectableKey, ViewportState, Zoom},
-    }, project::{SubmachineDocument, alphabet::ValidatedAlphabet}, visual::{
+    diagram::{editor::session::{CanvasInteractionState, RectSelection, SelectableKey, ViewportState, Zoom}, model::submachine::Submachine},
+    editor::layout::{GraphLayout, LayoutPos}, project::{SubmachineDocument, alphabet::ValidatedAlphabet}, visual::{
         mappings::{NODE_SIZE, SELECTED_NODE_FILL}, render::{ render_edge::{build_edge_points, render_edges},
             render_grid::render_grid,
             render_node::render_nodes,

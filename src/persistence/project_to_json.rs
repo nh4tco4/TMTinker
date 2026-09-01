@@ -2,7 +2,7 @@ use serde_json::Error;
 use slotmap::SecondaryMap;
 
 use crate::{
-    core::tm::{NodeKey, SubmachineKey},
+    diagram::model::submachine::{NodeKey, SubmachineKey},
     diagram::model::node::{Direction, NodeAction},
     editor::layout,
     project::Project,
