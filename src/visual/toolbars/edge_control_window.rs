@@ -1,6 +1,7 @@
 use egui::{Id, TextEdit, text::{CCursor, CCursorRange}};
 
-use crate::{core::{ValidatedAlphabet, tm::{Edge, EdgeKey, Submachine, TransitionSymbols, TransitionSymbolsError}}, editor::session::ViewportState};
+use crate::{core::tm::{Edge, EdgeKey, Submachine, TransitionSymbols, TransitionSymbolsError}, editor::session::ViewportState, project::alphabet::ValidatedAlphabet};
+
 
 #[derive(Debug, Clone)]
 struct EdgeEditState {

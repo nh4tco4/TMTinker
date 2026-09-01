@@ -1,9 +1,17 @@
 use egui::{
-    Id, TextEdit, text::{CCursor, CCursorRange},
+    Id, TextEdit,
+    text::{CCursor, CCursorRange},
 };
 
 use crate::{
-    core::{ValidatedAlphabet, tm::{Action, Node, NodeKey, NodeProblem, Submachine}}, editor::{layout::LayoutPos, session::ViewportState}, visual::{
+    core::{
+        NonZeroU32,
+        tm::{NodeKey, NodeProblem, Submachine},
+    },
+    diagram::model::node::{Direction, Node, NodeAction},
+    editor::{layout::LayoutPos, session::ViewportState},
+    project::alphabet::ValidatedAlphabet,
+    visual::{
         mappings::{NODE_SIZE, descriptions::*},
         utils::text_input::{buffer_to_load, formatted_buffer},
     },
@@ -29,10 +37,10 @@ pub fn node_options_base(
     node_key: NodeKey,
     window_pos: egui::Pos2,
 ) {
-    let shift =
-        LayoutPos::new(NODE_SIZE, NODE_SIZE) * viewport.camera_zoom.get();
-
+    let shift = LayoutPos::new(NODE_SIZE, NODE_SIZE) * viewport.camera_zoom.get();
     let new_pos = viewport.screen_to_world(shift + window_pos.into());
+
+    let problems: Vec<NodeProblem> = submachine.get_node_problems(node_key).into_iter().collect();
 
     egui::Window::new("Node Options")
         .id(Id::new(("node_options", node_key)))
@@ -40,67 +48,37 @@ pub fn node_options_base(
         .resizable(false)
         .fixed_pos(new_pos)
         .movable(true)
-        .scroll_bar_visibility(
-            egui::scroll_area::ScrollBarVisibility::AlwaysHidden,
-        )
+        .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::AlwaysHidden)
         .show(ctx, |ui| {
-            let problems = submachine.get_node_problems(node_key);
-
             if let Some(node) = submachine.get_mut_node(node_key) {
                 let window_width = ui.available_width();
 
-                match node.action {
-                    Action::Start => {
+                let action = node.action().clone();
+
+                match action {
+                    NodeAction::Start => {
                         show_description(ui, start_node_description());
                     }
-                    Action::Stop => {
+                    NodeAction::Stop => {
                         show_description(ui, end_node_description());
                     }
-                    Action::Left(power) => {
-                        choose_power(
-                            node,
-                            node_key,
-                            ui,
-                            power,
-                            window_width,
-                        );
+                    NodeAction::Move { direction, repeat } => {
+                        choose_power(node, node_key, ui, repeat, window_width);
 
                         ui.separator();
-                        show_description(ui, left_node_description());
+                        match direction {
+                            Direction::Left => show_description(ui, left_node_description()),
+                            Direction::Right => show_description(ui, right_node_description()),
+                        }
                     }
-                    Action::Right(power) => {
-                        choose_power(
-                            node,
-                            node_key,
-                            ui,
-                            power,
-                            window_width,
-                        );
-
-                        ui.separator();
-                        show_description(ui, right_node_description());
-                    }
-                    Action::Submachine {power, .. } => {
-                        choose_power(
-                            node,
-                            node_key,
-                            ui,
-                            power,
-                            window_width,
-                        );
+                    NodeAction::Call { repeat, .. } => {
+                        choose_power(node, node_key, ui, repeat, window_width);
 
                         ui.separator();
                         show_description(ui, submachine_node_description());
                     }
-                    Action::Write(character) => {
-                        choose_sign(
-                            node,
-                            node_key,
-                            ui,
-                            alphabet,
-                            character,
-                            window_width,
-                        );
+                    NodeAction::Write(character) => {
+                        choose_sign(node, node_key, ui, alphabet, character, window_width);
 
                         ui.separator();
                         show_description(ui, space_node_description());
@@ -112,32 +90,22 @@ pub fn node_options_base(
                 ui.separator();
                 ui.label("Problems:");
 
-                for problem in problems {
+                for problem in &problems {
                     match problem {
                         NodeProblem::NotAvailable => {
-                            ui.label(
-                                "Node is not connected to any other node",
-                            );
+                            ui.label("Node is not connected to any other node");
                         }
                         NodeProblem::StartNodeIncoming => {
-                            ui.label(format!(
-                                "Start node can't have incoming transitions"
-                            ));
+                            ui.label("Start node can't have incoming transitions");
                         }
                         NodeProblem::EndNodeOutgoing => {
-                            ui.label(format!(
-                                "End node cant' have outgoing transitions"
-                            ));
+                            ui.label("End node cant' have outgoing transitions");
                         }
                         NodeProblem::MissingTransition(character) => {
-                            ui.label(format!(
-                                "Missing transition for '{character}'"
-                            ));
+                            ui.label(format!("Missing transition for '{character}'"));
                         }
                         NodeProblem::AmbiguousTransition(character) => {
-                            ui.label(format!(
-                                "Ambiguous transition for '{character}'"
-                            ));
+                            ui.label(format!("Ambiguous transition for '{character}'"));
                         }
                     }
                 }
@@ -149,7 +117,7 @@ fn choose_power(
     node: &mut Node,
     node_key: NodeKey,
     ui: &mut egui::Ui,
-    power: u32,
+    power: NonZeroU32,
     window_width: f32,
 ) {
     let state_id = Id::new(("node_power_edit", node_key));
@@ -157,17 +125,14 @@ fn choose_power(
     let mut state = ui.ctx().data_mut(|data| {
         data.get_temp::<PowerEditState>(state_id)
             .unwrap_or_else(|| PowerEditState {
-                value: power.to_string(),
+                value: power.get().to_string(),
                 select_all: true,
             })
     });
 
     ui.label("Power:");
 
-    let response = ui.add(
-        TextEdit::singleline(&mut state.value)
-            .desired_width(window_width),
-    );
+    let response = ui.add(TextEdit::singleline(&mut state.value).desired_width(window_width));
 
     if state.select_all {
         select_all(ui.ctx(), response.id, state.value.chars().count());
@@ -177,16 +142,31 @@ fn choose_power(
     if response.changed() {
         state.value.retain(|c| c.is_ascii_digit());
 
-        let new_power = state
-            .value
-            .parse::<u32>()
-            .unwrap_or(1)
-            .max(1);
+        let new_power_raw = state.value.parse::<u32>().unwrap_or(1).max(1);
 
-        match &mut node.action {
-            Action::Left(power) | Action::Right(power) => {*power = new_power;},
+        let new_power = NonZeroU32::new(new_power_raw);
+
+        let mut new_action = None;
+
+        match node.action() {
+            NodeAction::Move { direction, .. } => {
+                new_action = Some(NodeAction::Move {
+                    repeat: new_power,
+                    direction: direction.clone(),
+                })
+            }
+            NodeAction::Call { target, .. } => {
+                new_action = Some(NodeAction::Call {
+                    repeat: new_power,
+                    target: *target,
+                })
+            }
             _ => {}
         };
+
+        if let Some(action) = new_action {
+            node.set_action(action);
+        }
     }
 
     ui.ctx().data_mut(|data| {
@@ -213,17 +193,11 @@ fn choose_sign(
             })
     });
 
-    state.value = formatted_buffer(
-        &alphabet.iter().map(|c| *c).collect(),
-        &state.value
-    );
+    state.value = formatted_buffer(&alphabet.iter().map(|c| *c).collect(), &state.value);
 
     ui.label("Sign:");
 
-    let response = ui.add(
-        TextEdit::singleline(&mut state.value)
-            .desired_width(window_width),
-    );
+    let response = ui.add(TextEdit::singleline(&mut state.value).desired_width(window_width));
 
     if state.select_all {
         select_all(ui.ctx(), response.id, state.value.chars().count());
@@ -231,12 +205,9 @@ fn choose_sign(
     }
 
     if response.changed() {
-        let new_char = buffer_to_load(&state.value)
-            .chars()
-            .next()
-            .unwrap_or(' ');
+        let new_char = buffer_to_load(&state.value).chars().next().unwrap_or(' ');
 
-        node.action = Action::Write(new_char);
+        node.set_action(NodeAction::Write(new_char));
     }
 
     ui.ctx().data_mut(|data| {
@@ -244,18 +215,12 @@ fn choose_sign(
     });
 }
 
-fn select_all(
-    ctx: &egui::Context,
-    edit_id: Id,
-    char_count: usize,
-) {
+fn select_all(ctx: &egui::Context, edit_id: Id, char_count: usize) {
     if let Some(mut state) = TextEdit::load_state(ctx, edit_id) {
-        state.cursor.set_char_range(Some(
-            CCursorRange::two(
-                CCursor::new(0),
-                CCursor::new(char_count),
-            ),
-        ));
+        state.cursor.set_char_range(Some(CCursorRange::two(
+            CCursor::new(0),
+            CCursor::new(char_count),
+        )));
 
         state.store(ctx, edit_id);
     }

@@ -2,7 +2,10 @@ use std::collections::{HashSet, hash_set::Iter};
 
 use slotmap::{SecondaryMap, SlotMap, new_key_type};
 
-use crate::core::ValidatedAlphabet;
+use crate::{
+    diagram::model::node::{Node, NodeAction},
+    project::alphabet::ValidatedAlphabet,
+};
 
 new_key_type! {
     pub struct SubmachineKey;
@@ -72,12 +75,12 @@ pub enum TransitionSymbolsError {
 pub struct TransitionSymbols(HashSet<char>);
 
 pub struct TransitionSymbolsIter<'a> {
-    inner: Iter<'a, char>
+    inner: Iter<'a, char>,
 }
 
 impl<'a> Iterator for TransitionSymbolsIter<'a> {
     type Item = char;
-    
+
     fn next(&mut self) -> Option<Self::Item> {
         self.inner.next().copied()
     }
@@ -123,7 +126,7 @@ impl TransitionSymbols {
 
     pub fn iter(&self) -> TransitionSymbolsIter<'_> {
         TransitionSymbolsIter {
-            inner: self.0.iter()
+            inner: self.0.iter(),
         }
     }
 }
@@ -131,25 +134,6 @@ impl TransitionSymbols {
 new_key_type! {
     pub struct NodeKey;
     pub struct EdgeKey;
-}
-
-#[derive(serde::Deserialize, serde::Serialize, Clone, PartialEq, Eq, Debug)]
-pub enum Action {
-    Start,
-    Stop,
-    Left(u32),
-    Right(u32),
-    Write(char),
-    Submachine {
-        name: String,
-        key: SubmachineKey,
-        power: u32,
-    }
-}
-
-#[derive(serde::Deserialize, serde::Serialize, Clone, PartialEq, Eq, Debug)]
-pub struct Node {
-    pub action: Action,
 }
 
 #[derive(serde::Deserialize, serde::Serialize, Clone, PartialEq, Eq, Debug)]
@@ -174,13 +158,17 @@ pub enum NodeProblem {
     EndNodeOutgoing,
 }
 
-
 impl Submachine {
-    pub fn add_node(&mut self, action: Action) -> NodeKey {
-        self.nodes.insert(Node { action })
+    pub fn add_node(&mut self, action: NodeAction) -> NodeKey {
+        self.nodes.insert(Node::new(action))
     }
 
-    pub fn add_edge(&mut self, chars: TransitionSymbols, source: NodeKey, target: NodeKey) -> EdgeKey {
+    pub fn add_edge(
+        &mut self,
+        chars: TransitionSymbols,
+        source: NodeKey,
+        target: NodeKey,
+    ) -> EdgeKey {
         self.edges.insert(Edge {
             chars,
             source,
@@ -190,7 +178,7 @@ impl Submachine {
 
     pub fn nodes_iter(&self) -> impl Iterator<Item = (NodeKey, &Node)> {
         self.nodes.iter()
-    } 
+    }
 
     pub fn get_node(&self, key: NodeKey) -> Option<&Node> {
         self.nodes.get(key)
@@ -200,8 +188,8 @@ impl Submachine {
         self.nodes.get_mut(key)
     }
 
-    pub fn get_node_action(&self, key: NodeKey) -> Option<&Action> {
-        self.nodes.get(key).map(|node| &node.action)
+    pub fn get_node_action(&self, key: NodeKey) -> Option<&NodeAction> {
+        self.nodes.get(key).map(|node| node.action())
     }
 
     pub fn get_node_problems(&self, key: NodeKey) -> Vec<NodeProblem> {
@@ -214,7 +202,7 @@ impl Submachine {
 
     pub fn edges_iter(&self) -> impl Iterator<Item = (EdgeKey, &Edge)> {
         self.edges.iter()
-    } 
+    }
 
     pub fn get_transition(&self, key: NodeKey, symbol: char) -> Option<NodeKey> {
         self.outgoing_edges(key)
@@ -274,14 +262,15 @@ impl Submachine {
 
             let mut problems = Vec::new();
 
-            match node.action {
-                Action::Left(_) | Action::Right(_) | Action::Submachine { .. } | Action::Write(_) => {
+            match node.action() {
+                NodeAction::Move { .. } | NodeAction::Call { .. } | NodeAction::Write(_) => {
                     if !has_incoming && !has_outgoing {
                         problems.push(NodeProblem::NotAvailable);
                     }
 
                     for symbol in alphabet.iter() {
-                        let matching_edges = self.outgoing_edges(key)
+                        let matching_edges = self
+                            .outgoing_edges(key)
                             .filter(|edge| edge.accepts(*symbol))
                             .count();
 
@@ -296,7 +285,7 @@ impl Submachine {
                         }
                     }
                 }
-                Action::Start => {
+                NodeAction::Start => {
                     if !has_outgoing {
                         problems.push(NodeProblem::NotAvailable);
                     }
@@ -306,7 +295,8 @@ impl Submachine {
                     }
 
                     for symbol in alphabet.iter() {
-                        let matching_edges = self.outgoing_edges(key)
+                        let matching_edges = self
+                            .outgoing_edges(key)
                             .filter(|edge| edge.accepts(*symbol))
                             .count();
 
@@ -321,7 +311,7 @@ impl Submachine {
                         }
                     }
                 }
-                Action::Stop => {
+                NodeAction::Stop => {
                     if !has_incoming {
                         problems.push(NodeProblem::NotAvailable);
                     }

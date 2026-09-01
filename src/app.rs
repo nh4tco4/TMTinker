@@ -1,6 +1,6 @@
 use slotmap::{SlotMap, new_key_type};
 
-use crate::{core::ValidatedAlphabet, project::{Project, ProjectAction}, visual::{mappings::setup_visuals, render_menu, router::{Page, TinkerAction, render_tinker}}};
+use crate::{project::{Project, ProjectAction, alphabet::ValidatedAlphabet}, visual::{mappings::setup_visuals, render_menu, router::{Page, TinkerAction, render_tinker}}};
 
 new_key_type! {
     pub struct ProjectKey;

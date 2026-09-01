@@ -1,9 +1,9 @@
 use egui::{Pos2, Rect, Vec2};
 
 use crate::{
-    core::{ValidatedAlphabet, tm::Submachine}, editor::{
+    core::tm::Submachine, editor::{
         layout::{GraphLayout, LayoutPos}, session::{CanvasInteractionState, RectSelection, SelectableKey, ViewportState, Zoom},
-    }, project::SubmachineDocument, visual::{
+    }, project::{SubmachineDocument, alphabet::ValidatedAlphabet}, visual::{
         mappings::{NODE_SIZE, SELECTED_NODE_FILL}, render::{ render_edge::{build_edge_points, render_edges},
             render_grid::render_grid,
             render_node::render_nodes,
@@ -419,11 +419,11 @@ fn handle_click(
         },
         EditorTool::Edit(EditTools::Move) => {}
         EditorTool::Submachine {
-            name,
             key,
             power: _,
+            ..
         } => {
-            submachine_tool(submachine_document, snapped, key, name.to_owned());
+            submachine_tool(submachine_document, snapped, key);
         }
     }
 }

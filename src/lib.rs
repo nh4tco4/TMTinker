@@ -4,7 +4,9 @@ mod app;
 mod core;
 mod editor;
 mod persistence;
-mod visual;
 mod project;
+mod visual;
+
+mod diagram;
 
 pub use app::App;

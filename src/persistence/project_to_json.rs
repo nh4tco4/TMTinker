@@ -2,10 +2,10 @@ use serde_json::Error;
 use slotmap::SecondaryMap;
 
 use crate::{
-    core::tm::{self, NodeKey},
+    core::tm::{NodeKey, SubmachineKey},
+    diagram::model::node::{Direction, NodeAction},
     editor::layout,
     project::Project,
-    core::tm::SubmachineKey
 };
 
 #[derive(serde::Serialize, serde::Deserialize, Default)]
@@ -22,10 +22,7 @@ pub enum Action {
     Left(u32),
     Right(u32),
     Write(char),
-    Submachine {
-        target_id: usize,
-        power: u32,
-    },
+    Submachine { target_id: usize, power: u32 },
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Default)]
@@ -49,7 +46,7 @@ pub(crate) struct Edge {
     pub target: usize,
 }
 
-#[derive(serde::Serialize, serde::Deserialize,)]
+#[derive(serde::Serialize, serde::Deserialize)]
 pub(crate) struct Note {
     pub content: String,
     pub position: Position,
@@ -75,10 +72,7 @@ impl From<layout::LayoutPos> for Position {
 
 impl From<Position> for layout::LayoutPos {
     fn from(pos: Position) -> Self {
-        layout::LayoutPos {
-            x: pos.x,
-            y: pos.y,
-        }
+        layout::LayoutPos { x: pos.x, y: pos.y }
     }
 }
 
@@ -90,10 +84,7 @@ impl From<egui::Pos2> for Position {
 
 impl From<Position> for egui::Pos2 {
     fn from(pos: Position) -> Self {
-        egui::Pos2 {
-            x: pos.x,
-            y: pos.y,
-        }
+        egui::Pos2 { x: pos.x, y: pos.y }
     }
 }
 
@@ -104,8 +95,7 @@ impl ProjectBundle {
         bundle.alphabet = project.get_alphabet_iter().copied().collect();
         bundle.name = project.get_name();
 
-        let mut submachine_id_map: SecondaryMap<SubmachineKey, usize> =
-            SecondaryMap::new();
+        let mut submachine_id_map: SecondaryMap<SubmachineKey, usize> = SecondaryMap::new();
 
         for (idx, (key, _)) in project.list_submachines().enumerate() {
             submachine_id_map.insert(key, idx);
@@ -123,28 +113,25 @@ impl ProjectBundle {
                 });
             }
 
-            let mut node_id_map: SecondaryMap<NodeKey, usize> =
-                SecondaryMap::new();
+            let mut node_id_map: SecondaryMap<NodeKey, usize> = SecondaryMap::new();
 
             for (idx, (key, node)) in document.machine.nodes_iter().enumerate() {
-                let action = match &node.action {
-                    tm::Action::Start => Action::Start,
-                    tm::Action::Stop => Action::Stop,
-                    tm::Action::Left(n) => Action::Left(*n),
-                    tm::Action::Right(n) => Action::Right(*n),
-                    tm::Action::Write(c) => Action::Write(*c),
-                    tm::Action::Submachine {
-                        key,
-                        name: _name,
-                        power,
-                    } => {
+                let action = match node.action() {
+                    NodeAction::Start => Action::Start,
+                    NodeAction::Stop => Action::Stop,
+                    NodeAction::Move { direction, repeat } => match direction {
+                        Direction::Left => Action::Left(repeat.get()),
+                        Direction::Right => Action::Right(repeat.get()),
+                    },
+                    NodeAction::Write(c) => Action::Write(*c),
+                    NodeAction::Call { target, repeat } => {
                         let id = *submachine_id_map
-                            .get(*key)
+                            .get(*target)
                             .expect("Submachine action references missing submachine");
 
                         Action::Submachine {
                             target_id: id,
-                            power: *power,
+                            power: repeat.get(),
                         }
                     }
                 };

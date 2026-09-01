@@ -1,6 +1,6 @@
 use egui::Pos2;
 
-use crate::{core::{ValidatedAlphabet, tm::{NodeKey, TransitionSymbols}}, editor::{layout::NoteKey, session::SelectableKey}, project::SubmachineDocument};
+use crate::{core::tm::{NodeKey, TransitionSymbols}, editor::{layout::NoteKey, session::SelectableKey}, project::{SubmachineDocument, alphabet::ValidatedAlphabet}};
 
 pub fn delete_tool(submachine_document: &mut SubmachineDocument, selected_item: SelectableKey) {
     match selected_item {

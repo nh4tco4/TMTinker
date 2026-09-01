@@ -1,7 +1,7 @@
 use egui::{CentralPanel, Grid, Id, ScrollArea};
 
 use crate::{
-    app::App, core::ValidatedAlphabet, project::ProjectAction,
+    app::App, project::{ProjectAction, alphabet::ValidatedAlphabet},
 };
 
 #[derive(Clone, Default)]

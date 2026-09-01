@@ -1,21 +1,46 @@
 use egui::Pos2;
 
-use crate::{core::tm::{Action, NodeKey, SubmachineKey}, project::SubmachineDocument};
+use crate::{
+    core::{
+        NonZeroU32,
+        tm::{NodeKey, SubmachineKey},
+    },
+    diagram::model::node::{Direction, NodeAction},
+    project::SubmachineDocument,
+};
 
-pub fn place_node(document: &mut SubmachineDocument, position: Pos2, action: Action) -> NodeKey {
+pub fn place_node(
+    document: &mut SubmachineDocument,
+    position: Pos2,
+    action: NodeAction,
+) -> NodeKey {
     document.add_node(position, action)
 }
 
 pub fn left_tool(document: &mut SubmachineDocument, position: Pos2) -> NodeKey {
-    place_node(document, position, Action::Left(1))
+    place_node(
+        document,
+        position,
+        NodeAction::Move {
+            direction: Direction::Left,
+            repeat: NonZeroU32::new(1),
+        },
+    )
 }
 
 pub fn right_tool(document: &mut SubmachineDocument, position: Pos2) -> NodeKey {
-    place_node(document, position, Action::Right(1))
+    place_node(
+        document,
+        position,
+        NodeAction::Move {
+            direction: Direction::Right,
+            repeat: NonZeroU32::new(1),
+        },
+    )
 }
 
 pub fn write_tool(document: &mut SubmachineDocument, position: Pos2) -> NodeKey {
-    place_node(document, position, Action::Write(' '))
+    place_node(document, position, NodeAction::Write(' '))
 }
 
 pub fn start_tool(document: &mut SubmachineDocument, position: Pos2) -> NodeKey {
@@ -27,13 +52,24 @@ pub fn start_tool(document: &mut SubmachineDocument, position: Pos2) -> NodeKey 
     // for key in existing {
     //     document.current_graph_mut().remove_node(key);
     // }
-    place_node(document, position, Action::Start)
+    place_node(document, position, NodeAction::Start)
 }
 
 pub fn stop_tool(document: &mut SubmachineDocument, position: Pos2) -> NodeKey {
-    place_node(document, position, Action::Stop)
+    place_node(document, position, NodeAction::Stop)
 }
 
-pub fn submachine_tool(document: &mut SubmachineDocument, position: Pos2, submachine_key: &SubmachineKey, name: String) -> NodeKey {
-    place_node(document, position, Action::Submachine {name, key: *submachine_key, power: 1})
+pub fn submachine_tool(
+    document: &mut SubmachineDocument,
+    position: Pos2,
+    submachine_key: &SubmachineKey,
+) -> NodeKey {
+    place_node(
+        document,
+        position,
+        NodeAction::Call {
+            target: *submachine_key,
+            repeat: NonZeroU32::new(1),
+        },
+    )
 }
