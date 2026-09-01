@@ -1,9 +1,10 @@
-use std::collections::{HashSet, hash_set::Iter};
-
 use slotmap::{SecondaryMap, SlotMap, new_key_type};
 
 use crate::{
-    diagram::model::node::{Node, NodeAction},
+    diagram::model::{
+        node::{Node, NodeAction},
+        transition::{Edge, EdgeKey, TransitionSymbols},
+    },
     project::alphabet::ValidatedAlphabet,
 };
 
@@ -59,94 +60,8 @@ pub struct SubmachineFrame {
     parent_state: Option<NodeKey>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, thiserror::Error)]
-pub enum TransitionSymbolsError {
-    #[error("Symbols must not be empty")]
-    Empty,
-
-    #[error("Alphabet doesn't contain selected character.")]
-    AlphabetDoesNotContain(char),
-
-    #[error("Alphabet contains duplicated characters.")]
-    DuplicatedCharacter(char),
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
-pub struct TransitionSymbols(HashSet<char>);
-
-pub struct TransitionSymbolsIter<'a> {
-    inner: Iter<'a, char>,
-}
-
-impl<'a> Iterator for TransitionSymbolsIter<'a> {
-    type Item = char;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        self.inner.next().copied()
-    }
-}
-
-impl<'a> IntoIterator for &'a TransitionSymbols {
-    type Item = char;
-    type IntoIter = TransitionSymbolsIter<'a>;
-
-    fn into_iter(self) -> Self::IntoIter {
-        self.iter()
-    }
-}
-
-impl TransitionSymbols {
-    pub fn new(
-        symbols: impl IntoIterator<Item = char>,
-        alphabet: &ValidatedAlphabet,
-    ) -> Result<Self, TransitionSymbolsError> {
-        let alphabet_set: HashSet<char> = alphabet.iter().copied().collect();
-        let mut symbols_set = HashSet::new();
-
-        for symbol in symbols {
-            if !alphabet_set.contains(&symbol) {
-                return Err(TransitionSymbolsError::AlphabetDoesNotContain(symbol));
-            }
-
-            if !symbols_set.insert(symbol) {
-                return Err(TransitionSymbolsError::DuplicatedCharacter(symbol));
-            }
-        }
-
-        if symbols_set.is_empty() {
-            return Err(TransitionSymbolsError::Empty);
-        }
-
-        Ok(Self(symbols_set))
-    }
-
-    pub fn contains(&self, symbol: char) -> bool {
-        self.0.contains(&symbol)
-    }
-
-    pub fn iter(&self) -> TransitionSymbolsIter<'_> {
-        TransitionSymbolsIter {
-            inner: self.0.iter(),
-        }
-    }
-}
-
 new_key_type! {
     pub struct NodeKey;
-    pub struct EdgeKey;
-}
-
-#[derive(serde::Deserialize, serde::Serialize, Clone, PartialEq, Eq, Debug)]
-pub struct Edge {
-    pub chars: TransitionSymbols,
-    pub source: NodeKey,
-    pub target: NodeKey,
-}
-
-impl Edge {
-    pub fn accepts(&self, symbol: char) -> bool {
-        self.chars.iter().any(|c| c == symbol)
-    }
 }
 
 #[derive(serde::Deserialize, serde::Serialize, Clone, PartialEq, Eq, Debug)]
@@ -169,11 +84,7 @@ impl Submachine {
         source: NodeKey,
         target: NodeKey,
     ) -> EdgeKey {
-        self.edges.insert(Edge {
-            chars,
-            source,
-            target,
-        })
+        self.edges.insert(Edge::new(chars, source, target))
     }
 
     pub fn nodes_iter(&self) -> impl Iterator<Item = (NodeKey, &Node)> {
@@ -206,8 +117,8 @@ impl Submachine {
 
     pub fn get_transition(&self, key: NodeKey, symbol: char) -> Option<NodeKey> {
         self.outgoing_edges(key)
-            .find(|edge| edge.chars.contains(symbol))
-            .map(|edge| edge.target)
+            .find(|edge| edge.symbols().contains(symbol))
+            .map(Edge::target)
     }
 
     pub fn get_edge(&self, key: EdgeKey) -> Option<&Edge> {
@@ -219,18 +130,22 @@ impl Submachine {
     }
 
     pub fn outgoing_edges(&self, node: NodeKey) -> impl Iterator<Item = &Edge> {
-        self.edges.values().filter(move |edge| edge.source == node)
+        self.edges
+            .values()
+            .filter(move |edge| edge.source() == node)
     }
 
     pub fn incoming_edges(&self, node: NodeKey) -> impl Iterator<Item = &Edge> {
-        self.edges.values().filter(move |edge| edge.target == node)
+        self.edges
+            .values()
+            .filter(move |edge| edge.target() == node)
     }
 
     pub fn remove_node(&mut self, key: NodeKey) {
         let edge_keys: Vec<EdgeKey> = self
             .edges
             .iter()
-            .filter(|(_, e)| e.source == key || e.target == key)
+            .filter(|(_, edge)| edge.source() == key || edge.target() == key)
             .map(|(k, _)| k)
             .collect();
 

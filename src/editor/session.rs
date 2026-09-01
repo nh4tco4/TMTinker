@@ -1,6 +1,10 @@
 use egui::Vec2;
 
-use crate::{core::tm::{EdgeKey, NodeKey}, editor::layout::{LayoutPos, NoteKey}};
+use crate::{
+    core::tm::NodeKey,
+    diagram::model::transition::EdgeKey,
+    editor::layout::{LayoutPos, NoteKey},
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum SelectableKey {
@@ -148,4 +152,3 @@ impl ViewportState {
         screen_pos
     }
 }
-

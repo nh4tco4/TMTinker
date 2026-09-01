@@ -468,20 +468,20 @@ fn compute_hovered_key(graph: &GraphLayout, viewport: &ViewportState, submachine
     for (key, edge) in submachine.edges_iter() {
         let source = viewport.world_to_screen(
             graph
-                .get_node_position(edge.source)
+                .get_node_position(edge.source())
                 .expect("Unreachable. Edge can't exist without source"),
         );
 
         let target = viewport.world_to_screen(
             graph
-                .get_node_position(edge.target)
+                .get_node_position(edge.target())
                 .expect("Unreachable. Edge can't exist without target"),
         );
 
         let pts = build_edge_points(
             source.into(),
             target.into(),
-            edge.source == edge.target,
+            edge.source() == edge.target(),
             zoom,
         );
 

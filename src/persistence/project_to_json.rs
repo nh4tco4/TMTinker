@@ -150,14 +150,14 @@ impl ProjectBundle {
 
             for (_, edge) in document.machine.edges_iter() {
                 submachine.edges.push(Edge {
-                    chars: edge.chars.iter().collect(),
+                    chars: edge.symbols().iter().collect(),
 
                     source: *node_id_map
-                        .get(edge.source)
+                        .get(edge.source())
                         .expect("Edge source must exist"),
 
                     target: *node_id_map
-                        .get(edge.target)
+                        .get(edge.target())
                         .expect("Edge target must exist"),
                 });
             }

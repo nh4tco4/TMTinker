@@ -1,6 +1,11 @@
 use egui::{Id, TextEdit, text::{CCursor, CCursorRange}};
 
-use crate::{core::tm::{Edge, EdgeKey, Submachine, TransitionSymbols, TransitionSymbolsError}, editor::session::ViewportState, project::alphabet::ValidatedAlphabet};
+use crate::{
+    core::tm::Submachine,
+    diagram::model::transition::{Edge, EdgeKey, TransitionSymbols, TransitionSymbolsError},
+    editor::session::ViewportState,
+    project::alphabet::ValidatedAlphabet,
+};
 
 
 #[derive(Debug, Clone)]
@@ -30,7 +35,7 @@ pub fn edge_options_base(
         )
         .show(ctx, |ui| {
             if let Some(edge) = submachine.get_edge_mut(edge_key) {
-                choose_symbols(edge, edge_key, ui, edge.chars.clone(), alphabet);
+                choose_symbols(edge, edge_key, ui, edge.symbols().clone(), alphabet);
             }
         });
 }
@@ -73,7 +78,7 @@ fn choose_symbols(
 
         match parse_result {
             Ok(value) => {
-                edge.chars = value;
+                edge.set_symbols(value);
                 state.error = None;
             }
             Err(e) => { state.error = Some(e) }

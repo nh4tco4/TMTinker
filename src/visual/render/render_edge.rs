@@ -1,7 +1,8 @@
 use egui::{Painter, Pos2};
 
 use crate::{
-    core::tm::{Submachine, TransitionSymbols},
+    core::tm::Submachine,
+    diagram::model::transition::TransitionSymbols,
     editor::{
         layout::GraphLayout,
         session::{SelectableKey, SelectionState, ViewportState},
@@ -40,17 +41,17 @@ pub fn render_edges(
     for (key, edge) in machine.edges_iter() {
         let source_position = viewport.world_to_screen(
             graph
-                .get_node_position(edge.source)
+                .get_node_position(edge.source())
                 .expect("Unreachable. Edge can't exist without source."),
         );
 
         let target_position = viewport.world_to_screen(
             graph
-                .get_node_position(edge.target)
+                .get_node_position(edge.target())
                 .expect("Unreachable. Edge can't exist without target."),
         );
 
-        let is_loop = edge.source == edge.target;
+        let is_loop = edge.source() == edge.target();
 
         let points = build_edge_points(
             source_position.into(),
@@ -65,8 +66,8 @@ pub fn render_edges(
             .is_selected(&SelectableKey::Edge(key));
 
         let connects_selected_nodes =
-            selected_nodes.contains(&edge.source)
-                && selected_nodes.contains(&edge.target);
+            selected_nodes.contains(&edge.source())
+                && selected_nodes.contains(&edge.target());
 
         let edge_meta = if is_selected {
             EdgeMeta::Selected
@@ -105,7 +106,7 @@ pub fn render_edges(
         draw_edge_label(
             painter,
             &points,
-            &edge.chars,
+            edge.symbols(),
             viewport.camera_zoom.get(),
             color,
         );
