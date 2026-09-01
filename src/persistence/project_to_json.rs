@@ -2,9 +2,9 @@ use serde_json::Error;
 use slotmap::SecondaryMap;
 
 use crate::{
-    diagram::model::submachine::{NodeKey, SubmachineKey},
+    diagram::model::layout,
     diagram::model::node::{Direction, NodeAction},
-    editor::layout,
+    diagram::model::submachine::{NodeKey, SubmachineKey},
     project::Project,
 };
 
@@ -92,21 +92,21 @@ impl ProjectBundle {
     pub fn get_bundle(project: &Project) -> Self {
         let mut bundle = ProjectBundle::default();
 
-        bundle.alphabet = project.get_alphabet_iter().copied().collect();
-        bundle.name = project.get_name();
+        bundle.alphabet = project.document().alphabet().iter().copied().collect();
+        bundle.name = project.name().to_owned();
 
         let mut submachine_id_map: SecondaryMap<SubmachineKey, usize> = SecondaryMap::new();
 
-        for (idx, (key, _)) in project.list_submachines().enumerate() {
+        for (idx, (key, _)) in project.document().submachines().enumerate() {
             submachine_id_map.insert(key, idx);
         }
 
-        for (_, document) in project.list_submachines() {
+        for (_, document) in project.document().submachines() {
             let mut submachine = Submachine::default();
 
-            submachine.name = document.machine.name();
+            submachine.name = document.machine().name().to_owned();
 
-            for (_, note) in document.layout.notes_iter() {
+            for (_, note) in document.layout().notes_iter() {
                 submachine.notes.push(Note {
                     content: note.content.clone(),
                     position: note.position.into(),
@@ -115,7 +115,7 @@ impl ProjectBundle {
 
             let mut node_id_map: SecondaryMap<NodeKey, usize> = SecondaryMap::new();
 
-            for (idx, (key, node)) in document.machine.nodes_iter().enumerate() {
+            for (idx, (key, node)) in document.machine().nodes_iter().enumerate() {
                 let action = match node.action() {
                     NodeAction::Start => Action::Start,
                     NodeAction::Stop => Action::Stop,
@@ -139,7 +139,7 @@ impl ProjectBundle {
                 submachine.nodes.push(Node {
                     action,
                     position: document
-                        .layout
+                        .layout()
                         .get_node_position(key)
                         .expect("Node must have a layout position")
                         .into(),
@@ -148,7 +148,7 @@ impl ProjectBundle {
                 node_id_map.insert(key, idx);
             }
 
-            for (_, edge) in document.machine.edges_iter() {
+            for (_, edge) in document.machine().edges_iter() {
                 submachine.edges.push(Edge {
                     chars: edge.symbols().iter().collect(),
 
