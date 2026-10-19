@@ -1,22 +1,62 @@
-use serde_json::Error;
-use slotmap::SecondaryMap;
-
 use crate::{
-    diagram::model::layout,
-    diagram::model::node::{Direction, NodeAction},
-    diagram::model::submachine::{NodeKey, SubmachineKey},
-    project::Project,
+    core::alphabet::ValidatedAlphabet,
+    diagram::model::{
+        document::{DiagramDocument, SubmachineDocument},
+        layout::LayoutPos,
+        node::{Direction, NodeAction},
+        submachine::SubmachineName,
+        transition::TransitionSymbols,
+    },
+    project::{Project, model::ProjectName},
 };
+use serde::Deserialize;
+use slotmap::SlotMap;
+use std::num::NonZeroU32;
 
-#[derive(serde::Serialize, serde::Deserialize, Default)]
+#[derive(Deserialize)]
 pub struct ProjectBundle {
-    pub name: String,
-    pub submachines: Vec<Submachine>,
-    pub alphabet: Vec<char>,
+    name: String,
+    submachines: Vec<Machine>,
+    alphabet: Vec<char>,
 }
-
-#[derive(serde::Serialize, serde::Deserialize)]
-pub enum Action {
+#[derive(Deserialize)]
+struct Machine {
+    name: String,
+    nodes: Vec<Node>,
+    edges: Vec<Edge>,
+    #[serde(default)]
+    notes: Vec<Note>,
+}
+#[derive(Deserialize)]
+struct Node {
+    action: Action,
+    position: Position,
+}
+#[derive(Deserialize)]
+struct Edge {
+    chars: Vec<char>,
+    #[serde(default)]
+    inverse: bool,
+    source: usize,
+    target: usize,
+}
+#[derive(Deserialize)]
+struct Note {
+    content: String,
+    position: Position,
+}
+#[derive(Clone, Copy, Deserialize)]
+struct Position {
+    x: f32,
+    y: f32,
+}
+impl From<Position> for LayoutPos {
+    fn from(p: Position) -> Self {
+        Self::new(p.x, p.y)
+    }
+}
+#[derive(Deserialize)]
+enum Action {
     Start,
     Stop,
     Left(u32),
@@ -24,151 +64,67 @@ pub enum Action {
     Write(char),
     Submachine { target_id: usize, power: u32 },
 }
-
-#[derive(serde::Serialize, serde::Deserialize, Default)]
-pub(crate) struct Submachine {
-    pub name: String,
-    pub nodes: Vec<Node>,
-    pub edges: Vec<Edge>,
-    pub notes: Vec<Note>,
-}
-
-#[derive(serde::Serialize, serde::Deserialize)]
-pub(crate) struct Node {
-    pub action: Action,
-    pub position: Position,
-}
-
-#[derive(serde::Serialize, serde::Deserialize)]
-pub(crate) struct Edge {
-    pub chars: Vec<char>,
-    pub source: usize,
-    pub target: usize,
-}
-
-#[derive(serde::Serialize, serde::Deserialize)]
-pub(crate) struct Note {
-    pub content: String,
-    pub position: Position,
-}
-
-#[derive(serde::Serialize, serde::Deserialize, Clone, Copy)]
-pub(crate) struct Position {
-    x: f32,
-    y: f32,
-}
-
-impl Position {
-    pub fn new(x: f32, y: f32) -> Self {
-        Self { x, y }
-    }
-}
-
-impl From<layout::LayoutPos> for Position {
-    fn from(pos: layout::LayoutPos) -> Self {
-        Self::new(pos.x, pos.y)
-    }
-}
-
-impl From<Position> for layout::LayoutPos {
-    fn from(pos: Position) -> Self {
-        layout::LayoutPos { x: pos.x, y: pos.y }
-    }
-}
-
-impl From<egui::Pos2> for Position {
-    fn from(pos: egui::Pos2) -> Self {
-        Self::new(pos.x, pos.y)
-    }
-}
-
-impl From<Position> for egui::Pos2 {
-    fn from(pos: Position) -> Self {
-        egui::Pos2 { x: pos.x, y: pos.y }
-    }
-}
-
 impl ProjectBundle {
-    pub fn get_bundle(project: &Project) -> Self {
-        let mut bundle = ProjectBundle::default();
-
-        bundle.alphabet = project.document().alphabet().iter().copied().collect();
-        bundle.name = project.name().to_owned();
-
-        let mut submachine_id_map: SecondaryMap<SubmachineKey, usize> = SecondaryMap::new();
-
-        for (idx, (key, _)) in project.document().submachines().enumerate() {
-            submachine_id_map.insert(key, idx);
+    pub fn into_project(self) -> Result<Project, String> {
+        let alphabet = ValidatedAlphabet::new(self.alphabet).map_err(|e| e.to_string())?;
+        let name = ProjectName::new(self.name).map_err(|e| e.to_string())?;
+        let mut machines = SlotMap::with_key();
+        let mut keys = Vec::new();
+        for machine in &self.submachines {
+            keys.push(machines.insert(SubmachineDocument::new(
+                SubmachineName::parse(machine.name.clone()).map_err(|e| e.to_string())?,
+            )));
         }
-
-        for (_, document) in project.document().submachines() {
-            let mut submachine = Submachine::default();
-
-            submachine.name = document.machine().name().to_owned();
-
-            for (_, note) in document.layout().notes_iter() {
-                submachine.notes.push(Note {
-                    content: note.content.clone(),
-                    position: note.position.into(),
-                });
-            }
-
-            let mut node_id_map: SecondaryMap<NodeKey, usize> = SecondaryMap::new();
-
-            for (idx, (key, node)) in document.machine().nodes_iter().enumerate() {
-                let action = match node.action() {
-                    NodeAction::Start => Action::Start,
-                    NodeAction::Stop => Action::Stop,
-                    NodeAction::Move { direction, repeat } => match direction {
-                        Direction::Left => Action::Left(repeat.get()),
-                        Direction::Right => Action::Right(repeat.get()),
+        let entry = *keys.first().ok_or("Project has no main machine")?;
+        for (index, machine) in self.submachines.into_iter().enumerate() {
+            let document = machines.get_mut(keys[index]).ok_or("Missing submachine")?;
+            let mut nodes = Vec::new();
+            for node in machine.nodes {
+                let action = match node.action {
+                    Action::Start => NodeAction::Start,
+                    Action::Stop => NodeAction::Stop,
+                    Action::Write(c) => NodeAction::Write(c),
+                    Action::Left(power) => NodeAction::Move {
+                        direction: Direction::Left,
+                        repeat: NonZeroU32::new(power).ok_or("Repeat must be positive")?,
                     },
-                    NodeAction::Write(c) => Action::Write(*c),
-                    NodeAction::Call { target, repeat } => {
-                        let id = *submachine_id_map
-                            .get(*target)
-                            .expect("Submachine action references missing submachine");
-
-                        Action::Submachine {
-                            target_id: id,
-                            power: repeat.get(),
-                        }
-                    }
+                    Action::Right(power) => NodeAction::Move {
+                        direction: Direction::Right,
+                        repeat: NonZeroU32::new(power).ok_or("Repeat must be positive")?,
+                    },
+                    Action::Submachine { target_id, power } => NodeAction::Call {
+                        target: *keys.get(target_id).ok_or("Missing called submachine")?,
+                        repeat: NonZeroU32::new(power).ok_or("Repeat must be positive")?,
+                    },
                 };
-
-                submachine.nodes.push(Node {
-                    action,
-                    position: document
-                        .layout()
-                        .get_node_position(key)
-                        .expect("Node must have a layout position")
-                        .into(),
-                });
-
-                node_id_map.insert(key, idx);
+                nodes.push(document.add_node(node.position.into(), action));
             }
-
-            for (_, edge) in document.machine().edges_iter() {
-                submachine.edges.push(Edge {
-                    chars: edge.symbols().iter().collect(),
-
-                    source: *node_id_map
-                        .get(edge.source())
-                        .expect("Edge source must exist"),
-
-                    target: *node_id_map
-                        .get(edge.target())
-                        .expect("Edge target must exist"),
-                });
+            for edge in machine.edges {
+                let source = *nodes.get(edge.source).ok_or("Missing source node")?;
+                let target = *nodes.get(edge.target).ok_or("Missing target node")?;
+                let symbols = if edge.inverse {
+                    TransitionSymbols::new_exclusions(edge.chars, &alphabet)
+                } else {
+                    TransitionSymbols::new(edge.chars, &alphabet)
+                }
+                .map_err(|e| e.to_string())?;
+                let key = document
+                    .add_edge(symbols, source, target)
+                    .ok_or("Invalid edge")?;
+                document
+                    .machine_mut()
+                    .get_edge_mut(key)
+                    .ok_or("Missing imported edge")?
+                    .set_inverse(edge.inverse);
             }
-
-            bundle.submachines.push(submachine);
+            for note in machine.notes {
+                document
+                    .layout_mut()
+                    .add_note(note.position.into(), note.content);
+            }
         }
-
-        bundle
-    }
-
-    pub fn to_json(&self) -> Result<String, Error> {
-        serde_json::to_string(self)
+        let project = Project::new(name, DiagramDocument::from_parts(alphabet, machines, entry));
+        Project::validate(project.data())?;
+        Ok(project)
     }
 }

@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# This scripts runs various CI-like checks in a convenient way.
 set -eux
 
 cargo check --quiet --workspace --all-targets

@@ -1,6 +1,6 @@
 [package]
 name = "tmtinker"
-version = "0.1.0"
+version = "0.2.0"
 authors = ["nh4tco4 <youtodayhoware@gmail.com>"]
 edition = "2024"
 include = ["LICENSE-APACHE", "LICENSE-MIT", "**/*.rs", "Cargo.toml"]
@@ -14,23 +14,19 @@ targets = ["x86_64-unknown-linux-gnu", "wasm32-unknown-unknown"]
 egui = "0.33.0"
 serde_json = "1.0"
 eframe = { version = "0.33.0", default-features = false, features = [
-    "accesskit",     # Make egui compatible with screen readers. NOTE: adds a lot of dependencies.
-    "default_fonts", # Embed the default egui fonts.
-    "glow",          # Use the glow rendering backend. Alternative: "wgpu".
-    "persistence",   # Enable restoring app state when restarting the app.
+    "accesskit",
+    "default_fonts",
+    "glow",
+    "persistence",
 ] }
 log = "0.4.27"
-# turing_machine = { git = "https://github.com/nh4tco4/TMCore.git" }
 thiserror = "2.0"
 slotmap = { version = "1.0", features = ["serde"] }
 
-
-# You only need serde if you want app persistence:
 serde = { version = "1.0", features = ["derive"] }
-paste = "1.0.15"
 wasm-bindgen = "0.2.120"
+egui_extras = "0.33.3"
 
-# native:
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 env_logger = "0.11.8"
 rfd = "0.15"
@@ -43,7 +39,6 @@ eframe = { version = "0.33.0", default-features = false, features = [
     "x11",
 ] }
 
-# web:
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 wasm-bindgen-futures = "0.4.50"
 console_error_panic_hook = "0.1"
@@ -67,17 +62,10 @@ web-sys = { version = "0.3.70", features = [
 ] }
 
 [profile.release]
-opt-level = 2 # fast and small wasm
-
-# Optimize all dependencies even in debug builds:
-[profile.dev.package."*"]
 opt-level = 2
 
-
-[patch.crates-io]
-
-# ----------------------------------------------------------------------------------------
-# Lints:
+[profile.dev.package."*"]
+opt-level = 2
 
 [lints]
 workspace = true
@@ -92,7 +80,7 @@ rust_2018_idioms = { level = "warn", priority = -1 }
 rust_2021_prelude_collisions = "warn"
 semicolon_in_expressions_from_macros = "warn"
 trivial_numeric_casts = "warn"
-unsafe_op_in_unsafe_fn = "warn"                         # `unsafe_op_in_unsafe_fn` may become the default in future Rust versions: https://github.com/rust-lang/rust/issues/71668
+unsafe_op_in_unsafe_fn = "warn"
 unused_extern_crates = "warn"
 unused_import_braces = "warn"
 unused_lifetimes = "warn"
@@ -100,11 +88,9 @@ unused_lifetimes = "warn"
 trivial_casts = "allow"
 unused_qualifications = "allow"
 
-
 [workspace.lints.rustdoc]
 all = "warn"
 missing_crate_level_docs = "warn"
-
 
 [workspace.lints.clippy]
 allow_attributes = "warn"
@@ -120,11 +106,11 @@ dbg_macro = "warn"
 debug_assert_with_mut_call = "warn"
 default_union_representation = "warn"
 derive_partial_eq_without_eq = "warn"
-disallowed_macros = "warn"                   # See clippy.toml
-disallowed_methods = "warn"                  # See clippy.toml
-disallowed_names = "warn"                    # See clippy.toml
-disallowed_script_idents = "warn"            # See clippy.toml
-disallowed_types = "warn"                    # See clippy.toml
+disallowed_macros = "warn"
+disallowed_methods = "warn"
+disallowed_names = "warn"
+disallowed_script_idents = "warn"
+disallowed_types = "warn"
 doc_comment_double_space_linebreaks = "warn"
 doc_link_with_quotes = "warn"
 doc_markdown = "warn"
@@ -281,5 +267,5 @@ wildcard_dependencies = "warn"
 wildcard_imports = "warn"
 zero_sized_map_values = "warn"
 
-manual_range_contains = "allow" # this is better on 'allow'
-map_unwrap_or = "allow"         # this is better on 'allow'
+manual_range_contains = "allow"
+map_unwrap_or = "allow"

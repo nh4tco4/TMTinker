@@ -19,14 +19,14 @@
                 background: #1a1a2e;
             }
 
-            /* Full-screen canvas */
+
             canvas {
                 display: block;
                 width: 100vw;
                 height: 100vh;
             }
 
-            /* Loading overlay */
+
             #loading_text {
                 position: fixed;
                 inset: 0;
@@ -59,16 +59,16 @@
         </style>
     </head>
     <body>
-        <!-- The egui canvas -->
+
         <canvas id="the_canvas_id"></canvas>
 
-        <!-- Shown until the WASM module is ready -->
+
         <div id="loading_text">
             <div class="spinner"></div>
             <span>Loading Turing Machine…</span>
         </div>
 
-        <!-- Trunk injects the WASM loader here -->
+
         <link data-trunk rel="rust" data-wasm-opt="2" />
     </body>
 </html>
