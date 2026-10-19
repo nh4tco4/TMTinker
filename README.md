@@ -1,30 +1,68 @@
-
 # Turing Machine Tinker
 
-An academic turing machine diagram editor for fundamental computer science related subjects.
-Turing machine presented here is based on T4 implementation, meaning each action of machine has
-starting state, symbol to detect, symbol to place, ending state. 
+Build Turing machine diagrams and watch them run on a tape. TMTinker is an editor and simulator for studying algorithms and teaching computer science, built with Rust and egui.
 
-<img width="1280" height="825" alt="image" src="https://github.com/user-attachments/assets/7c63fbd9-bf51-4bc7-8eec-126677bc3cbe" />
+**[Try it in your browser](https://tmtinker.pages.dev/)** *UNSTABLE AND NOT FULLY IMPLEMENTED*
 
-You can try out the demo on cloudflare pages: https://tmtinker.pages.dev/
-Or compile it natively:
+![Running a Turing machine: active nodes and tape changes](assets/readme/run_demo.gif)
+
+## Features
+
+- Draw machines with start, stop, move and write nodes. Connect them with transitions for the symbols in your alphabet.
+- Reuse submachines and add notes to explain your diagrams.
+- Run a machine, pause it or advance one step at a time. Adjust the step interval and follow the active node and tape head.
+- Edit the tape as text or change individual cells and the head position.
+- Save up to six tests per project with initial and expected tapes. Run them with a step limit and compare results relative to the head.
+- Manage projects in a library, undo and redo edits, and import or export projects as JSON.
+
+## Screenshots
+
+![TMTinker main menu and project library](assets/readme/menu.png)
+
+![TMTinker edtior demonstation](assets/readme/editor.png)
+
+## Your first machine
+
+1. Open the app, choose **New project**, and enter a name and alphabet. You get the blank symbol `λ` as part of the alphabet.
+2. Place nodes on the canvas. Choose **Link**, then click the source and target nodes. Select the transition to edit its symbols.
+3. Choose **Validate** to check the diagram, then **Run diagram** to open the runner.
+4. Enter a tape and choose **Apply tape**. Use parentheses to mark the head cell: `01(1)0`. For an empty tape, use `(λ)`.
+5. Choose **Run** to start or **Step** to advance one step. Add initial and expected tapes to the test slots, then choose **Check all six** to run your saved tests.
+
+Press **F1** or click **?** in the editor or runner for keyboard shortcuts and mouse controls. Use **Export project** to keep a JSON copy of your work.
+
+## Run from source
+
+You need Rust 1.88 or newer.
+
 ```bash
-cargo build --release
-cargo run
+git clone https://github.com/nh4tco4/TMTinker.git
+cd TMTinker
+cargo run --release
 ```
 
+Windows, trunk and macOS builds may be unstable.
 
-**Still under development**
-*Version 1.0 and manual are coming in the next few months.*
+To serve the web version on your machine, install Trunk and the WebAssembly target:
 
----
+```bash
+rustup target add wasm32-unknown-unknown
+cargo install trunk --locked
+trunk serve --open
+```
 
+## Roadmap
 
-The interface includes a project library with autosave and JSON import/export, docked editor controls, undo/redo, and an indexed tape editor. Each project has six tests with initial and expected tapes. Use **Check all six** to compare the results, including head positions.
+The current priority is to stabilize the editor and runner. The target for these additions and improvements is the end of November 2026:
 
-Keyboard shortcuts: Ctrl/⌘+Z for undo, Ctrl/⌘+Y or Ctrl/⌘+Shift+Z for redo, Ctrl/⌘+S for save, P to open the runner, V to validate, and Ctrl/⌘+N to create a submachine inside a project (or a project in the library). In the runner, P runs or pauses, Space performs one step, Ctrl/⌘+C resets, and Ctrl/⌘+D stops. Undo and redo are available in the editor. Buttons and the cheatsheet show the shortcuts.
+- Built-in machines: copy a word, move one word left and move one word right.
+- TU4 support and conversion between TU4 and diagrams.
+- A Russian interface.
+- PDF, SVG and PNG export.
+- Improved Windows, macOS and web support.
 
-Quadruple projects, documentation links and submachine export are marked **Soon**. See [UI architecture and verification](docs/ui-architecture.md) for the implementation and test commands.
+## Contributing
 
-Use the arrow keys to move selected nodes by one grid cell. Select a note to edit its text. Open **Cheatsheet** in the editor or runner, or press **F1**, for keyboard and mouse controls. Close it with **Escape**. Delete projects from the library after confirming the project name.
+Open an issue with steps to reproduce a bug or a description of the feature you need. For code changes, include what you changed and how you checked it in your pull request.
+
+Run `./check.sh` for the repository checks. You need Trunk and the `wasm32-unknown-unknown` target for the web checks.
