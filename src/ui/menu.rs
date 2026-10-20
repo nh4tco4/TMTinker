@@ -14,6 +14,7 @@ pub struct MenuUiState {
     pub delete_project: Option<ProjectKey>,
     name: String,
     alphabet: String,
+    tu4: bool,
     error: Option<String>,
     background: MenuBackground,
 }
@@ -24,6 +25,7 @@ impl Default for MenuUiState {
             delete_project: None,
             name: String::new(),
             alphabet: "01".into(),
+            tu4: false,
             error: None,
             background: MenuBackground::default(),
         }
@@ -49,7 +51,7 @@ pub fn render_menu(
                     ui.set_min_size((card.size() - egui::vec2(50., 50.)).max(egui::Vec2::ZERO));
                     ui.label(RichText::new("TMTinker").size(32.).strong());
                     ui.label(
-                        RichText::new("Create and run Turing machine diagrams.")
+                        RichText::new("Create and run Turing machine diagrams and TU4 programs.")
                             .color(Color32::from_gray(105)),
                     );
                     ui.add_space(22.);
@@ -182,8 +184,9 @@ fn project_list(
                             ui.vertical(|ui| {
                                 ui.label(RichText::new(project.name()).size(17.).strong());
                                 ui.weak(format!(
-                                    "Diagram · {} symbols",
-                                    project.document().alphabet().len()
+                                    "{} · {} symbols",
+                                    if project.is_tu4() { "TU4" } else { "Diagram" },
+                                    project.alphabet().len()
                                 ));
                             });
                             ui.with_layout(
@@ -208,7 +211,6 @@ fn project_list(
                                         ui.label(format!(
                                             "Alphabet: {}",
                                             project
-                                                .document()
                                                 .alphabet()
                                                 .iter()
                                                 .map(|c| if *c == ' ' { 'λ' } else { *c })
@@ -247,8 +249,8 @@ fn new_project_dialog(state: &mut MenuUiState, ctx: &egui::Context, commands: &m
             ui.add_space(12.);
             ui.label("Project type");
             ui.horizontal(|ui| {
-                let _ = ui.selectable_label(true, "Diagram");
-                ui.add_enabled(false, egui::Button::new("Quadruples · Soon"));
+                ui.selectable_value(&mut state.tu4, false, "Diagram");
+                ui.selectable_value(&mut state.tu4, true, "TU4 Quadruples");
             });
             ui.add_space(12.);
             ui.label("Name");
@@ -274,7 +276,11 @@ fn new_project_dialog(state: &mut MenuUiState, ctx: &egui::Context, commands: &m
                             chars.insert(0, ' ');
                         }
                         let alphabet = ValidatedAlphabet::new(chars).map_err(|e| e.to_string())?;
-                        Ok::<_, String>(Command::Create { name, alphabet })
+                        Ok::<_, String>(if state.tu4 {
+                            Command::CreateTu4 { name, alphabet }
+                        } else {
+                            Command::Create { name, alphabet }
+                        })
                     })();
                     match result {
                         Ok(command) => {

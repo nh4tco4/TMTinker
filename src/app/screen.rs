@@ -9,6 +9,16 @@ use crate::{
 pub enum Screen {
     Menu,
     Diagram(Box<DiagramWorkspace>),
+    Tu4(Box<Tu4Workspace>),
+}
+pub struct Tu4Workspace {
+    pub project: ProjectKey,
+    pub ui: crate::tu4::ui::Tu4UiState,
+    pub runner: Option<Tu4RunnerWorkspace>,
+}
+pub struct Tu4RunnerWorkspace {
+    pub session: crate::tu4::runtime::Tu4RunSession,
+    pub checks: Option<crate::shared::checks::BatchCheck<crate::tu4::runtime::Tu4RunSession>>,
 }
 pub struct DiagramWorkspace {
     pub project: ProjectKey,

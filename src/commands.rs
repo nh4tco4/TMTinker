@@ -26,6 +26,8 @@ pub enum CommandId {
     Reset,
     Stop,
     EditDiagram,
+    EditSource,
+    OpenTu4,
     AddMachine,
     RemoveMachine,
     RenameMachine,
@@ -93,7 +95,7 @@ pub static REGISTRY: &[CommandInfo] = &[
     entry!(Undo, "Undo", "↶", Z, true),
     entry!(Redo, "Redo", "↷", Y, true),
     entry!(Validate, "Validate", "✓", V, false),
-    entry!(OpenRunner, "Run diagram", "▶", P, false),
+    entry!(OpenRunner, "Run project", "▶", P, false),
     entry!(BackToEditor, "Editor", "←"),
     entry!(Run, "Run", "▶", P, false),
     entry!(Pause, "Pause", "Ⅱ", P, false),
@@ -101,6 +103,8 @@ pub static REGISTRY: &[CommandInfo] = &[
     entry!(Reset, "Reset", "↺", C, true),
     entry!(Stop, "Stop", "■", D, true),
     entry!(EditDiagram, "Edit diagram", "◇"),
+    entry!(EditSource, "Edit quadruples", "✎"),
+    entry!(OpenTu4, "Open project in TU4", "↗"),
     entry!(AddMachine, "New submachine", "+", N, true),
     entry!(RemoveMachine, "Delete submachine", "×"),
     entry!(RenameMachine, "Rename submachine", "✎"),
@@ -154,6 +158,10 @@ pub enum Command {
         name: ProjectName,
         alphabet: ValidatedAlphabet,
     },
+    CreateTu4 {
+        name: ProjectName,
+        alphabet: ValidatedAlphabet,
+    },
     Open(ProjectKey),
     DeleteProject(ProjectKey),
     Edit {
@@ -171,10 +179,11 @@ impl Command {
     pub fn id(&self) -> CommandId {
         match self {
             Self::Invoke(id) => *id,
-            Self::Create { .. } => NewProject,
+            Self::Create { .. } | Self::CreateTu4 { .. } => NewProject,
             Self::Open(_) => OpenProject,
             Self::DeleteProject(_) => DeleteProject,
             Self::Edit { edit, .. } => match edit {
+                ProjectEdit::SetSource(_) => EditSource,
                 ProjectEdit::ReplaceMachine { .. } => EditDiagram,
                 ProjectEdit::AddMachine(_) => AddMachine,
                 ProjectEdit::RemoveMachine(_) => RemoveMachine,

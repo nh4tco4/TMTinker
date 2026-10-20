@@ -178,7 +178,46 @@ impl DiagramDocument {
         Ok(())
     }
 
+    pub fn validate_calls(&self) -> Result<(), String> {
+        use std::collections::{HashMap, VecDeque};
+
+        let mut incoming: HashMap<_, usize> = self.submachines().map(|(key, _)| (key, 0)).collect();
+        let mut calls: HashMap<_, Vec<_>> = HashMap::new();
+        for (key, document) in self.submachines() {
+            for (_, node) in document.machine().nodes_iter() {
+                if let NodeAction::Call { target, .. } = node.action() {
+                    *incoming
+                        .get_mut(target)
+                        .ok_or("Missing called submachine")? += 1;
+                    calls.entry(key).or_default().push(*target);
+                }
+            }
+        }
+        let mut ready: VecDeque<_> = incoming
+            .iter()
+            .filter_map(|(&key, &count)| (count == 0).then_some(key))
+            .collect();
+        let mut visited = 0;
+        while let Some(key) = ready.pop_front() {
+            visited += 1;
+            if let Some(targets) = calls.get(&key) {
+                for target in targets {
+                    let count = incoming.get_mut(target).expect("call target was checked");
+                    *count -= 1;
+                    if *count == 0 {
+                        ready.push_back(*target);
+                    }
+                }
+            }
+        }
+        if visited != incoming.len() {
+            return Err("Recursive submachine calls are not allowed".into());
+        }
+        Ok(())
+    }
+
     pub fn validate(&self) -> Result<(), String> {
+        self.validate_calls()?;
         ValidatedAlphabet::new(self.alphabet.iter().copied()).map_err(|e| e.to_string())?;
         if self.submachine(self.entry_submachine).is_none() {
             return Err("Missing main machine".into());

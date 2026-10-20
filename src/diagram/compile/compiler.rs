@@ -76,6 +76,8 @@ pub struct CompiledNode {
 
 #[derive(thiserror::Error, Clone, Debug, PartialEq, Eq)]
 pub enum CompileError {
+    #[error("{0}")]
+    InvalidCallGraph(String),
     #[error("The diagram has no entry submachine.")]
     MissingEntrySubmachine,
     #[error("Submachine {machine:?} must have exactly one Start node (found {count}).")]
@@ -213,6 +215,9 @@ impl CompiledNode {
 }
 
 pub fn compile(source: &DiagramDocument) -> Result<CompiledDiagram, CompileError> {
+    source
+        .validate_calls()
+        .map_err(CompileError::InvalidCallGraph)?;
     let program = compile_program(source)?;
     Ok(CompiledDiagram {
         source: source.clone(),

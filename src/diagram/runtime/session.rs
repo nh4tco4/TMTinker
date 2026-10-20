@@ -5,6 +5,7 @@ use crate::{
         model::{node::Direction, transition::EdgeKey},
         runtime::RunStatus,
     },
+    shared::runtime::RunSession,
 };
 
 pub struct DiagramRunSession {
@@ -272,6 +273,44 @@ fn moved_head_position(head: i32, direction: &Direction, repeat: std::num::NonZe
         Direction::Right => i64::from(repeat.get()),
     };
     (i64::from(head) + delta).clamp(i64::from(i32::MIN), i64::from(i32::MAX)) as i32
+}
+
+impl RunSession for crate::diagram::runtime::DiagramRunSession {
+    type Program = crate::diagram::compile::CompiledDiagram;
+
+    fn new(program: Self::Program, tape: Tape) -> Self {
+        Self::new(program, tape)
+    }
+    fn tape(&self) -> &Tape {
+        self.tape()
+    }
+    fn status(&self) -> RunStatus {
+        self.status()
+    }
+    fn steps(&self) -> u64 {
+        self.steps()
+    }
+    fn fault(&self) -> Option<&str> {
+        self.fault()
+    }
+    fn step(&mut self) {
+        self.step();
+    }
+    fn run(&mut self) {
+        self.run();
+    }
+    fn pause(&mut self) {
+        self.pause();
+    }
+    fn stop(&mut self) {
+        self.stop();
+    }
+    fn reset(&mut self) {
+        self.reset();
+    }
+    fn program(&self) -> Self::Program {
+        self.compiled().clone()
+    }
 }
 
 #[cfg(test)]

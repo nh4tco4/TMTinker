@@ -1,3 +1,5 @@
+use crate::core::alphabet::ValidatedAlphabet;
+use crate::tu4::model::Tu4Document;
 use crate::{
     core::{tape::Tape, test_case::TestCase},
     diagram::model::{
@@ -6,6 +8,29 @@ use crate::{
     },
 };
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
+
+#[derive(Clone, PartialEq, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum ProjectDocument {
+    Diagram(DiagramDocument),
+    Tu4(Tu4Document),
+}
+
+impl ProjectDocument {
+    pub fn diagram_mut(&mut self) -> Result<&mut DiagramDocument, String> {
+        match self {
+            Self::Diagram(document) => Ok(document),
+            Self::Tu4(_) => Err("Diagram editing requires a diagram project".into()),
+        }
+    }
+    pub fn alphabet(&self) -> &ValidatedAlphabet {
+        match self {
+            Self::Diagram(document) => document.alphabet(),
+            Self::Tu4(document) => &document.alphabet,
+        }
+    }
+}
 
 #[derive(thiserror::Error, Clone, Debug)]
 pub enum ProjectNameError {
@@ -36,7 +61,7 @@ impl ProjectName {
 #[derive(Clone, PartialEq, Serialize, Deserialize)]
 pub struct ProjectData {
     pub name: ProjectName,
-    pub document: DiagramDocument,
+    pub document: ProjectDocument,
     pub created_at: u64,
     pub prepared_tape: Tape,
     pub tests: [Option<TestCase>; 6],
@@ -47,9 +72,11 @@ pub struct ProjectData {
 pub enum TransactionKey {
     Canvas(SubmachineKey),
     PreparedTape,
+    Source,
 }
 
 pub enum ProjectEdit {
+    SetSource(Arc<str>),
     ReplaceMachine {
         key: SubmachineKey,
         machine: Box<SubmachineDocument>,
@@ -70,6 +97,7 @@ pub enum ProjectEdit {
 impl ProjectEdit {
     pub fn label(&self) -> &'static str {
         match self {
+            Self::SetSource(_) => "Edit quadruples",
             Self::ReplaceMachine { .. } => "Edit diagram",
             Self::AddMachine(_) => "Create submachine",
             Self::RemoveMachine(_) => "Delete submachine",
@@ -100,12 +128,34 @@ impl Project {
     pub fn new(name: ProjectName, document: DiagramDocument) -> Self {
         Self::from_data(ProjectData {
             name,
-            document,
+            document: ProjectDocument::Diagram(document),
             created_at: timestamp(),
             prepared_tape: Tape::new(),
             tests: std::array::from_fn(|_| None),
             step_limit: 100_000,
         })
+    }
+    pub fn new_tu4(name: ProjectName, alphabet: ValidatedAlphabet) -> Self {
+        Self::from_data(ProjectData {
+            name,
+            document: ProjectDocument::Tu4(Tu4Document::new(alphabet)),
+            created_at: timestamp(),
+            prepared_tape: Tape::new(),
+            tests: std::array::from_fn(|_| None),
+            step_limit: 100_000,
+        })
+    }
+    pub fn is_tu4(&self) -> bool {
+        matches!(self.data.document, ProjectDocument::Tu4(_))
+    }
+    pub fn alphabet(&self) -> &ValidatedAlphabet {
+        self.data.document.alphabet()
+    }
+    pub fn tu4(&self) -> Option<&Tu4Document> {
+        match &self.data.document {
+            ProjectDocument::Tu4(document) => Some(document),
+            ProjectDocument::Diagram(_) => None,
+        }
     }
     pub fn from_data(data: ProjectData) -> Self {
         Self {
@@ -122,7 +172,10 @@ impl Project {
         self.data.name.as_str()
     }
     pub fn document(&self) -> &DiagramDocument {
-        &self.data.document
+        match &self.data.document {
+            ProjectDocument::Diagram(document) => document,
+            ProjectDocument::Tu4(_) => panic!("diagram access requires a diagram project"),
+        }
     }
     pub fn can_undo(&self) -> bool {
         !self.undo.is_empty() || self.pending.is_some()
@@ -156,19 +209,31 @@ impl Project {
         let before = self.data.clone();
         let label = edit.label().to_owned();
         match edit {
+            ProjectEdit::SetSource(source) => {
+                let ProjectDocument::Tu4(document) = &mut self.data.document else {
+                    return Err("Source editing requires a TU4 project".into());
+                };
+                document.source = source;
+            }
             ProjectEdit::ReplaceMachine { key, machine } => {
-                self.data.document.replace_submachine(key, *machine)?;
+                let document = self.data.document.diagram_mut()?;
+                document.replace_submachine(key, *machine)?;
+                if let Err(error) = document.validate_calls() {
+                    self.data = before;
+                    return Err(error);
+                }
             }
             ProjectEdit::AddMachine(name) => {
-                self.data.document.add_submachine(name);
+                self.data.document.diagram_mut()?.add_submachine(name);
             }
             ProjectEdit::RemoveMachine(key) => {
-                self.data.document.remove_submachine(key)?;
+                self.data.document.diagram_mut()?.remove_submachine(key)?;
             }
             ProjectEdit::RenameMachine { key, name } => {
                 let machine = self
                     .data
                     .document
+                    .diagram_mut()?
                     .submachine_mut(key)
                     .ok_or("Submachine no longer exists")?;
                 if machine.is_system() {
@@ -177,13 +242,13 @@ impl Project {
                 machine.machine_mut().rename(name);
             }
             ProjectEdit::SetTape(tape) => {
-                tape.validate(self.document().alphabet())?;
+                tape.validate(self.alphabet())?;
                 self.data.prepared_tape = tape;
             }
             ProjectEdit::SetTest { slot, test } => {
                 if let Some(test) = &test {
-                    test.initial_tape.validate(self.document().alphabet())?;
-                    test.expected_tape.validate(self.document().alphabet())?;
+                    test.initial_tape.validate(self.alphabet())?;
+                    test.expected_tape.validate(self.alphabet())?;
                 }
                 *self.data.tests.get_mut(slot).ok_or("Invalid test slot")? = test;
             }
@@ -247,7 +312,13 @@ impl Project {
     }
     pub fn validate(data: &ProjectData) -> Result<(), String> {
         ProjectName::new(data.name.as_str().to_owned()).map_err(|e| e.to_string())?;
-        data.document.validate()?;
+        match &data.document {
+            ProjectDocument::Diagram(document) => document.validate()?,
+            ProjectDocument::Tu4(document) => {
+                ValidatedAlphabet::new(document.alphabet.iter().copied())
+                    .map_err(|e| e.to_string())?;
+            }
+        }
         let alphabet = data.document.alphabet();
         data.prepared_tape.validate(alphabet)?;
         for test in data.tests.iter().flatten() {

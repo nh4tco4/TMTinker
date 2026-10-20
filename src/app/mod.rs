@@ -2,12 +2,15 @@ mod dispatch;
 mod screen;
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+use crate::diagram::runtime::checks::BatchCheck;
+use crate::shared::runtime::RunSession;
 use crate::{
     commands::{Command, CommandId, REGISTRY},
     diagram::{
         compile::compile,
         editor::session::DiagramEditorSession,
-        runtime::{DiagramRunSession, RunStatus, checks::BatchCheck},
+        runtime::{DiagramRunSession, RunStatus},
         ui::{
             editor::{
                 page::{EditorUiState, diagram_editor_page},
@@ -29,7 +32,7 @@ use crate::{
         theme::setup_visuals,
     },
 };
-use screen::{DiagramRunnerWorkspace, DiagramWorkspace, Screen};
+use screen::{DiagramRunnerWorkspace, DiagramWorkspace, Screen, Tu4RunnerWorkspace, Tu4Workspace};
 use slotmap::{SlotMap, new_key_type};
 use std::{
     sync::mpsc::{self, Receiver, Sender},
@@ -96,55 +99,72 @@ impl App {
     fn project(&self) -> Option<&Project> {
         match &self.screen {
             Screen::Diagram(w) => self.projects.get(w.project),
+            Screen::Tu4(w) => self.projects.get(w.project),
             Screen::Menu => None,
         }
     }
     fn enabled(&self, id: CommandId) -> bool {
         use CommandId::*;
-        let workspace = match &self.screen {
-            Screen::Diagram(w) => Some(w),
-            Screen::Menu => None,
+        let (workspace, diagram, runner, status, checking) = match &self.screen {
+            Screen::Menu => (false, false, false, None, false),
+            Screen::Diagram(w) => (
+                true,
+                true,
+                w.runner.is_some(),
+                w.runner.as_ref().map(|r| r.session.status()),
+                w.runner
+                    .as_ref()
+                    .and_then(|r| r.checks.as_ref())
+                    .is_some_and(|b| !b.is_done()),
+            ),
+            Screen::Tu4(w) => (
+                true,
+                false,
+                w.runner.is_some(),
+                w.runner.as_ref().map(|r| r.session.status()),
+                w.runner
+                    .as_ref()
+                    .and_then(|r| r.checks.as_ref())
+                    .is_some_and(|b| !b.is_done()),
+            ),
         };
-        let runner = workspace.and_then(|w| w.runner.as_ref());
-        let checking = runner
-            .and_then(|r| r.checks.as_ref())
-            .is_some_and(|b| !b.is_done());
         match id {
-            Cheatsheet => workspace.is_some(),
-            NewProject | DeleteProject => workspace.is_none(),
-            Import => true,
-            OpenProject => true,
-            Undo => runner.is_none() && self.project().is_some_and(Project::can_undo),
-            Redo => runner.is_none() && self.project().is_some_and(Project::can_redo),
-            Run | Step => {
-                !checking && runner.is_some_and(|r| r.session.status() == RunStatus::Paused)
-            }
-            Pause => runner.is_some_and(|r| r.session.status() == RunStatus::Running),
-            Reset | Stop | LoadTest | EditTape | EditTest | StepLimit => {
-                !checking && runner.is_some()
-            }
+            Cheatsheet => workspace,
+            NewProject | DeleteProject => !workspace,
+            Import | OpenProject => true,
+            Undo => !runner && self.project().is_some_and(Project::can_undo),
+            Redo => !runner && self.project().is_some_and(Project::can_redo),
+            Run | Step => !checking && status == Some(RunStatus::Paused),
+            Pause => !checking && status == Some(RunStatus::Running),
+            Reset | Stop | LoadTest | EditTape | EditTest | StepLimit => !checking && runner,
             CheckAll => {
                 !checking
-                    && runner.is_some()
+                    && runner
                     && self
                         .project()
                         .is_some_and(|p| p.data().tests.iter().any(Option::is_some))
             }
             CancelChecks => checking,
-            TapeLeftFive | TapeLeft | TapeRight | TapeRightFive | TapeHead => runner.is_some(),
-            BackToEditor => !checking && runner.is_some(),
-            OpenRunner | Validate | EditDiagram | AddMachine | RemoveMachine | RenameMachine
-            | OpenMachine | PlaceMachine | MachineSettings => {
-                workspace.is_some() && runner.is_none()
-            }
-            Move | Link | Note | Delete | Start | End | Left | Right | Write => {
-                workspace.is_some() && runner.is_none()
-            }
-            Save | Export | Menu => workspace.is_some(),
+            TapeLeftFive | TapeLeft | TapeRight | TapeRightFive | TapeHead => runner,
+            BackToEditor => !checking && runner,
+            OpenRunner | Validate => workspace && !runner,
+            EditSource => workspace && !diagram && !runner,
+            OpenTu4 | EditDiagram | AddMachine | RemoveMachine | RenameMachine | OpenMachine
+            | PlaceMachine | MachineSettings | Move | Link | Note | Delete | Start | End | Left
+            | Right | Write => diagram && !runner,
+            Save | Export | Menu => workspace,
         }
     }
     fn open(&mut self, key: ProjectKey) -> Result<(), String> {
         let project = self.projects.get(key).ok_or("Project no longer exists")?;
+        if project.is_tu4() {
+            self.screen = Screen::Tu4(Box::new(Tu4Workspace {
+                project: key,
+                ui: crate::tu4::ui::Tu4UiState::new(project),
+                runner: None,
+            }));
+            return Ok(());
+        }
         self.screen = Screen::Diagram(Box::new(DiagramWorkspace {
             project: key,
             editor: DiagramEditorSession::new(project.document().entry_submachine()),
@@ -200,8 +220,16 @@ impl eframe::App for App {
             self.finish_gesture();
         }
         if self.cheatsheet_open {
-            let runner = matches!(&self.screen, Screen::Diagram(w) if w.runner.is_some());
-            crate::ui::cheatsheet::show(ctx, &mut self.cheatsheet_open, runner);
+            let runner = match &self.screen {
+                Screen::Diagram(w) => w.runner.is_some(),
+                Screen::Tu4(w) => w.runner.is_some(),
+                Screen::Menu => false,
+            };
+            if matches!(self.screen, Screen::Tu4(_)) {
+                crate::tu4::ui::cheatsheet(ctx, &mut self.cheatsheet_open);
+            } else {
+                crate::ui::cheatsheet::show(ctx, &mut self.cheatsheet_open, runner);
+            }
         }
         self.auto_save(ctx, frame, now);
     }
@@ -290,23 +318,42 @@ impl App {
     fn draw_screen(&mut self, ctx: &egui::Context, now: f64) -> Vec<Command> {
         let commands = match &mut self.screen {
             Screen::Menu => render_menu(&self.projects, &mut self.menu, ctx),
+            Screen::Tu4(w) => {
+                let Some(project) = self.projects.get(w.project) else {
+                    self.screen = Screen::Menu;
+                    return Vec::new();
+                };
+                if let Some(runner) = &mut w.runner {
+                    crate::shared::runner::tick(&mut runner.session, &mut w.ui.shared, now, ctx);
+                    if let Some(checks) = &mut runner.checks {
+                        if !checks.is_done() {
+                            checks.tick();
+                            ctx.request_repaint();
+                        }
+                    }
+                    crate::tu4::ui::runner_page(
+                        project,
+                        &runner.session,
+                        &mut w.ui,
+                        runner.checks.as_ref(),
+                        ctx,
+                    )
+                } else {
+                    crate::tu4::ui::editor_page(project, &mut w.ui, ctx)
+                }
+            }
             Screen::Diagram(w) => {
                 let Some(project) = self.projects.get(w.project) else {
                     self.screen = Screen::Menu;
                     return Vec::new();
                 };
                 if let Some(runner) = &mut w.runner {
-                    if runner.session.status() == RunStatus::Running {
-                        if now >= runner.ui.next_step {
-                            runner.session.step();
-                            runner.ui.next_step = now + runner.ui.interval_ms as f64 / 1000.;
-                        }
-                        if runner.session.status() == RunStatus::Running {
-                            ctx.request_repaint_after(Duration::from_secs_f64(
-                                (runner.ui.next_step - now).max(0.001),
-                            ));
-                        }
-                    }
+                    crate::shared::runner::tick(
+                        &mut runner.session,
+                        &mut runner.ui.shared,
+                        now,
+                        ctx,
+                    );
                     if let Some(checks) = &mut runner.checks {
                         if !checks.is_done() {
                             checks.tick();
@@ -337,6 +384,7 @@ impl App {
                         || w.ui.settings.is_some()
                         || w.runner.as_ref().is_some_and(|r| r.ui.has_modal())
                 }
+                Screen::Tu4(w) => w.ui.shared.has_modal(),
                 Screen::Menu => false,
             };
         if !modal_open {
@@ -380,10 +428,13 @@ impl App {
         }
     }
     fn finish_gesture(&mut self) {
-        if let Screen::Diagram(w) = &self.screen {
-            if let Some(project) = self.projects.get_mut(w.project) {
-                project.finish_transaction();
-            }
+        let key = match &self.screen {
+            Screen::Diagram(w) => Some(w.project),
+            Screen::Tu4(w) => Some(w.project),
+            Screen::Menu => None,
+        };
+        if let Some(project) = key.and_then(|key| self.projects.get_mut(key)) {
+            project.finish_transaction();
         }
     }
     fn auto_save(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame, now: f64) {

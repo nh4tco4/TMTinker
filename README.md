@@ -14,6 +14,8 @@ Build Turing machine diagrams and watch them run on a tape. TMTinker is an edito
 - Edit the tape as text or change individual cells and the head position.
 - Save up to six tests per project with initial and expected tapes. Run them with a step limit and compare results relative to the head.
 - Manage projects in a library, undo and redo edits, and import or export projects as JSON.
+- Edit and run TU4 quadruples, or open a diagram as a separate TU4 project with its tape and tests.
+- Run without delay in batches. TU4 supports programs of 400,000 commands and highlights the executing line for sources up to 2,500 lines.
 
 ## Screenshots
 
@@ -30,6 +32,22 @@ Build Turing machine diagrams and watch them run on a tape. TMTinker is an edito
 5. Choose **Run** to start or **Step** to advance one step. Add initial and expected tapes to the test slots, then choose **Check all six** to run your saved tests.
 
 Press **F1** or click **?** in the editor or runner for keyboard shortcuts and mouse controls. Use **Export project** to keep a JSON copy of your work.
+
+## TU4 programs
+
+Choose **TU4 Quadruples** when creating a project, or click **Open project in TU4** in the diagram editor. Conversion creates a separate project and preserves the original diagram. Submachine calls and repeated moves expand into quadruples, so execution can take more steps. Recursive submachine calls are prohibited in diagrams.
+
+Write one command per line as `state,symbol,action,next_state`. For an empty tape, this program moves right, writes `1`, and halts:
+
+```text
+1,λ,>,2 // move right
+2,λ,1,3 // write 1
+3,1,~,0 // halt; ignore the fourth field
+```
+
+Use `<` for left, `>` for right, and `~` for halt. Other actions write a symbol from the project alphabet; `#` and `=` are ordinary symbols. Use `λ` or a literal space for blank. State numbers are unsigned 32-bit integers, and execution starts in the state of the first command. Writing the same symbol and staying in the same state continues the loop.
+
+**Run** compiles the source and locks editing until you return with **Editor**. The runner shares the diagram's tape controls and six test slots. **Run without delay** executes batches while keeping Pause available. Sources above 2,500 lines use a paged editor and display the current state and line number during execution. Saving and JSON export include the source text, comments, prepared tape and tests, including drafts that do not compile yet.
 
 ## Run from source
 
@@ -56,7 +74,7 @@ trunk serve --open
 The current priority is to stabilize the editor and runner. The target for these additions and improvements is the end of November 2026:
 
 - Built-in machines: copy a word, move one word left and move one word right.
-- TU4 support and conversion between TU4 and diagrams.
+- Conversion from TU4 to diagrams.
 - A Russian interface.
 - PDF, SVG and PNG export.
 - Improved Windows, macOS and web support.

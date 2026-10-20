@@ -17,6 +17,12 @@ impl App {
                 self.save_requested = true;
                 self.open(key)?;
             }
+            Command::CreateTu4 { name, alphabet } => {
+                let key = self.projects.insert(Project::new_tu4(name, alphabet));
+                self.dirty = true;
+                self.save_requested = true;
+                self.open(key)?;
+            }
             Command::Open(key) => self.open(key)?,
             Command::DeleteProject(key) => {
                 if self.projects.remove(key).is_some() {
@@ -43,6 +49,10 @@ impl App {
             }
             Command::SetTape(tape) => self.set_tape(tape)?,
             Command::ScrollTape(delta) => {
+                if let Screen::Tu4(w) = &mut self.screen {
+                    w.ui.shared.tape_center = w.ui.shared.tape_center.saturating_add(delta);
+                    w.ui.shared.follow_head = false;
+                }
                 if let Screen::Diagram(w) = &mut self.screen {
                     if let Some(runner) = &mut w.runner {
                         runner.ui.tape_center = runner.ui.tape_center.saturating_add(delta);
@@ -60,6 +70,20 @@ impl App {
         edit: ProjectEdit,
         group: Option<TransactionKey>,
     ) -> Result<(), String> {
+        if let Screen::Tu4(w) = &mut self.screen {
+            let project = self
+                .projects
+                .get_mut(w.project)
+                .ok_or("Project no longer exists")?;
+            if project.execute(edit, group)? {
+                self.dirty = true;
+                w.ui.error = None;
+                if let Some(runner) = &mut w.runner {
+                    runner.checks = None;
+                }
+            }
+            return Ok(());
+        }
         let removing_machine = matches!(&edit, ProjectEdit::RemoveMachine(_));
         let Screen::Diagram(w) = &mut self.screen else {
             return Ok(());
@@ -107,6 +131,24 @@ impl App {
         Ok(())
     }
     fn set_tape(&mut self, tape: Tape) -> Result<(), String> {
+        if let Screen::Tu4(w) = &mut self.screen {
+            let project = self
+                .projects
+                .get_mut(w.project)
+                .ok_or("Project no longer exists")?;
+            if project.execute(
+                ProjectEdit::SetTape(tape.clone()),
+                Some(TransactionKey::PreparedTape),
+            )? {
+                self.dirty = true;
+            }
+            w.ui.shared.sync_tape(&tape);
+            if let Some(runner) = &mut w.runner {
+                runner.session.replace_tape(tape);
+                runner.checks = None;
+            }
+            return Ok(());
+        }
         let Screen::Diagram(w) = &mut self.screen else {
             return Ok(());
         };
@@ -160,6 +202,23 @@ impl App {
                 self.save_requested = true;
             }
             CommandId::Undo | CommandId::Redo => self.change_history(id == CommandId::Undo)?,
+            CommandId::OpenTu4 => {
+                self.finish_gesture();
+                let project = self.project().ok_or("No open project")?;
+                let converted = crate::tu4::convert::convert(project.document())?;
+                let mut data = project.data().clone();
+                data.name = crate::project::model::ProjectName::new(format!(
+                    "{} TU4",
+                    project.name().chars().take(16).collect::<String>()
+                ))
+                .map_err(|e| e.to_string())?;
+                data.document = crate::project::model::ProjectDocument::Tu4(converted);
+                data.created_at = crate::project::model::timestamp();
+                let key = self.projects.insert(Project::from_data(data));
+                self.dirty = true;
+                self.save_requested = true;
+                self.open(key)?;
+            }
             CommandId::OpenRunner | CommandId::Validate => {
                 self.compile_project(id == CommandId::OpenRunner)?
             }
@@ -210,6 +269,17 @@ impl App {
     }
 
     fn change_history(&mut self, undo: bool) -> Result<(), String> {
+        if let Screen::Tu4(w) = &mut self.screen {
+            let project = self
+                .projects
+                .get_mut(w.project)
+                .ok_or("Project no longer exists")?;
+            if if undo { project.undo() } else { project.redo() } {
+                self.dirty = true;
+            }
+            w.ui.error = None;
+            return Ok(());
+        }
         let Screen::Diagram(w) = &mut self.screen else {
             return Ok(());
         };
@@ -249,6 +319,33 @@ impl App {
         Ok(())
     }
     fn compile_project(&mut self, run: bool) -> Result<(), String> {
+        if let Screen::Tu4(w) = &mut self.screen {
+            let project = self
+                .projects
+                .get_mut(w.project)
+                .ok_or("Project no longer exists")?;
+            project.finish_transaction();
+            let document = project.tu4().ok_or("Expected a TU4 project")?;
+            match crate::tu4::compile::compile(&document.source, &document.alphabet) {
+                Ok(compiled) => {
+                    w.ui.error = None;
+                    if run {
+                        w.ui.shared.sync_tape(&project.data().prepared_tape);
+                        w.runner = Some(Tu4RunnerWorkspace {
+                            session: crate::tu4::runtime::Tu4RunSession::new(
+                                compiled,
+                                project.data().prepared_tape.clone(),
+                            ),
+                            checks: None,
+                        });
+                    } else {
+                        self.set_notice(("TU4 program is valid".into(), false));
+                    }
+                }
+                Err(error) => w.ui.error = Some(error.to_string()),
+            }
+            return Ok(());
+        }
         let Screen::Diagram(w) = &mut self.screen else {
             return Ok(());
         };
@@ -277,55 +374,95 @@ impl App {
         Ok(())
     }
     fn runner_command(&mut self, id: CommandId, ctx: &egui::Context) -> Result<(), String> {
-        let Screen::Diagram(w) = &mut self.screen else {
-            return Ok(());
-        };
-        if id == CommandId::BackToEditor {
-            w.runner = None;
-            return Ok(());
-        }
-        let Some(runner) = &mut w.runner else {
-            return Ok(());
-        };
-        match id {
-            CommandId::Run => {
-                runner.session.run();
-                runner.ui.next_step = ctx.input(|i| i.time) + runner.ui.interval_ms as f64 / 1000.;
-                ctx.request_repaint();
+        match &mut self.screen {
+            Screen::Tu4(w) => {
+                if id == CommandId::BackToEditor {
+                    w.runner = None;
+                    return Ok(());
+                }
+                if let Some(runner) = &mut w.runner {
+                    let project = self
+                        .projects
+                        .get(w.project)
+                        .ok_or("Project no longer exists")?;
+                    runner_command(
+                        id,
+                        &mut runner.session,
+                        &mut w.ui.shared,
+                        &mut runner.checks,
+                        project,
+                        ctx,
+                    );
+                }
             }
-            CommandId::Pause => runner.session.pause(),
-            CommandId::Step => {
-                runner.session.pause();
-                runner.session.step();
+            Screen::Diagram(w) => {
+                if id == CommandId::BackToEditor {
+                    w.runner = None;
+                    return Ok(());
+                }
+                if let Some(runner) = &mut w.runner {
+                    let project = self
+                        .projects
+                        .get(w.project)
+                        .ok_or("Project no longer exists")?;
+                    runner_command(
+                        id,
+                        &mut runner.session,
+                        &mut runner.ui.shared,
+                        &mut runner.checks,
+                        project,
+                        ctx,
+                    );
+                }
             }
-            CommandId::Reset => {
-                runner.session.reset();
-                runner.checks = None;
-            }
-            CommandId::Stop => runner.session.stop(),
-            CommandId::TapeHead => {
-                runner.ui.follow_head = true;
-                runner.ui.tape_center = runner.session.tape().head_position();
-            }
-            CommandId::CheckAll => {
-                runner.session.pause();
-                let project = self
-                    .projects
-                    .get(w.project)
-                    .ok_or("Project no longer exists")?;
-                runner.checks = Some(BatchCheck::new(
-                    runner.session.compiled().clone(),
-                    project.data().tests.clone(),
-                    project.data().step_limit,
-                ));
-                ctx.request_repaint();
-            }
-            CommandId::CancelChecks => runner.checks = None,
-            _ => {}
+            Screen::Menu => {}
         }
         Ok(())
     }
 }
+
+fn runner_command<S: RunSession>(
+    id: CommandId,
+    session: &mut S,
+    ui: &mut crate::shared::runner::SharedRunnerUiState,
+    checks: &mut Option<crate::shared::checks::BatchCheck<S>>,
+    project: &Project,
+    ctx: &egui::Context,
+) {
+    match id {
+        CommandId::Run => {
+            session.run();
+            ui.next_step = ctx.input(|i| i.time) + ui.interval_ms as f64 / 1000.;
+            ctx.request_repaint();
+        }
+        CommandId::Pause => session.pause(),
+        CommandId::Step => {
+            session.pause();
+            session.step();
+        }
+        CommandId::Reset => {
+            session.reset();
+            *checks = None;
+        }
+        CommandId::Stop => session.stop(),
+        CommandId::TapeHead => {
+            ui.follow_head = true;
+            ui.tape_center = session.tape().head_position();
+        }
+        CommandId::CheckAll => {
+            session.pause();
+            *checks = Some(crate::shared::checks::BatchCheck::new(
+                session.program(),
+                project.data().tests.clone(),
+                project.data().step_limit,
+            ));
+            ctx.request_repaint();
+        }
+        CommandId::CancelChecks => *checks = None,
+        _ => {}
+    }
+}
+
 fn make_runner(project: &Project) -> Result<DiagramRunnerWorkspace, String> {
     let compiled = compile(project.document()).map_err(|e| e.to_string())?;
     let tape = project.data().prepared_tape.clone();

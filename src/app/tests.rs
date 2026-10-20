@@ -635,11 +635,22 @@ fn failed_storage_write_keeps_unsaved_data() {
 fn imported_nested_calls_keep_targets_and_repeat_counts() {
     let mut data = fixture(false).data().clone();
     let alphabet = data.document.alphabet().clone();
-    let parent = data.document.entry_submachine();
+    let parent = data
+        .document
+        .diagram_mut()
+        .expect("diagram document")
+        .entry_submachine();
     let child = data
         .document
+        .diagram_mut()
+        .expect("diagram document")
         .add_submachine(SubmachineName::parse("Child".into()).unwrap());
-    let machine = data.document.submachine_mut(child).unwrap();
+    let machine = data
+        .document
+        .diagram_mut()
+        .expect("diagram document")
+        .submachine_mut(child)
+        .unwrap();
     let start = machine.add_node(LayoutPos::new(450., 375.), NodeAction::Start);
     let write = machine.add_node(LayoutPos::new(600., 375.), NodeAction::Write('0'));
     let stop = machine.add_node(LayoutPos::new(750., 375.), NodeAction::Stop);
@@ -652,7 +663,12 @@ fn imported_nested_calls_keep_targets_and_repeat_counts() {
             )
             .unwrap();
     }
-    let machine = data.document.submachine_mut(parent).unwrap();
+    let machine = data
+        .document
+        .diagram_mut()
+        .expect("diagram document")
+        .submachine_mut(parent)
+        .unwrap();
     let node = machine
         .machine()
         .nodes_iter()
@@ -897,6 +913,224 @@ fn pointer_click(app: &mut App, ctx: &egui::Context, pos: egui::Pos2, time: f64)
             ],
         );
     }
+}
+
+fn save_tu4_snapshot(ctx: &egui::Context, out: egui::FullOutput) {
+    let mut renderer = crate::ui::test_renderer::TestRenderer::default();
+    renderer.update(&out);
+    if let Some(dir) = std::env::var_os("TMTINKER_UI_SNAPSHOTS") {
+        let dir = std::path::PathBuf::from(dir);
+        std::fs::create_dir_all(&dir).expect("snapshot directory");
+        renderer.save(ctx, out, 1280, 820, &dir.join("tu4-runner.ppm"));
+    }
+}
+
+#[test]
+fn tu4_editor_and_runner_use_the_project_lifecycle() {
+    use crate::ui::test_renderer::text_rects;
+    let ctx = egui::Context::default();
+    let mut app = App::new(&eframe::CreationContext::_new_kittest(ctx.clone()));
+    app.dispatch(
+        Command::CreateTu4 {
+            name: ProjectName::new("TU4 test".into()).expect("name"),
+            alphabet: ValidatedAlphabet::new([' ', '0', '1']).expect("alphabet"),
+        },
+        &ctx,
+    )
+    .expect("create TU4");
+    let out = frame(&mut app, &ctx, 1280., 820., 0.1, vec![]);
+    let hint = text_rects(&out)
+        .into_iter()
+        .find(|(text, _)| text.contains("1,λ,>,2"))
+        .expect("source editor hint")
+        .1;
+    pointer_click(&mut app, &ctx, hint.left_top() + egui::vec2(5., 5.), 0.2);
+    frame(
+        &mut app,
+        &ctx,
+        1280.,
+        820.,
+        0.3,
+        vec![egui::Event::Paste("1,λ,1,2\n2,1,~,0".into())],
+    );
+    assert_eq!(
+        app.project()
+            .expect("project")
+            .tu4()
+            .expect("TU4")
+            .source
+            .as_ref(),
+        "1,λ,1,2\n2,1,~,0"
+    );
+    app.dispatch(Command::Invoke(CommandId::OpenRunner), &ctx)
+        .expect("open runner");
+    assert!(!app.enabled(CommandId::EditSource));
+    assert!(!app.enabled(CommandId::Undo));
+    app.dispatch(
+        Command::Edit {
+            edit: ProjectEdit::SetSource(std::sync::Arc::from("blocked")),
+            group: None,
+        },
+        &ctx,
+    )
+    .expect("blocked edit is ignored");
+    let document = app.project().expect("project").tu4().expect("TU4");
+    assert!(document.source.starts_with("1,λ"));
+    let out = frame(&mut app, &ctx, 1280., 820., 0.4, vec![]);
+    for label in ["Run TU4", "Tests", "Tape", "Line: 1", "Run without delay"] {
+        assert!(
+            text_rects(&out).iter().any(|(text, _)| text == label),
+            "missing {label}"
+        );
+    }
+    save_tu4_snapshot(&ctx, out);
+    app.dispatch(Command::Invoke(CommandId::Step), &ctx)
+        .expect("write");
+    app.dispatch(Command::Invoke(CommandId::Step), &ctx)
+        .expect("halt");
+    let Screen::Tu4(w) = &app.screen else {
+        panic!("TU4 screen");
+    };
+    assert_eq!(
+        w.runner.as_ref().expect("runner").session.status(),
+        RunStatus::Halted
+    );
+    app.dispatch(Command::Invoke(CommandId::BackToEditor), &ctx)
+        .expect("return to editor");
+    assert!(app.enabled(CommandId::EditSource));
+    app.dispatch(Command::Invoke(CommandId::Undo), &ctx)
+        .expect("undo source");
+    assert!(
+        app.project()
+            .expect("project")
+            .tu4()
+            .expect("TU4")
+            .source
+            .is_empty()
+    );
+    app.dispatch(Command::Invoke(CommandId::Redo), &ctx)
+        .expect("redo source");
+    let mut storage = MemoryStorage::default();
+    app.persist(&mut storage).expect("save TU4");
+    let mut cc = eframe::CreationContext::_new_kittest(ctx.clone());
+    cc.storage = Some(&storage);
+    let restored = App::new(&cc);
+    assert!(
+        restored
+            .projects
+            .values()
+            .next()
+            .expect("restored project")
+            .is_tu4()
+    );
+}
+
+#[test]
+fn conversion_button_opens_a_separate_tu4_project_with_tape_and_tests() {
+    use crate::ui::test_renderer::text_rects;
+    let ctx = egui::Context::default();
+    let mut app = App::new(&eframe::CreationContext::_new_kittest(ctx.clone()));
+    let mut diagram = fixture(false);
+    let tape = Tape::from_text("(0)", -4, diagram.alphabet()).expect("tape");
+    diagram
+        .execute(ProjectEdit::SetTape(tape.clone()), None)
+        .expect("set tape");
+    diagram
+        .execute(
+            ProjectEdit::SetTest {
+                slot: 0,
+                test: Some(TestCase {
+                    initial_tape: tape.clone(),
+                    expected_tape: tape.clone(),
+                }),
+            },
+            None,
+        )
+        .expect("set test");
+    let key = app.projects.insert(diagram);
+    app.open(key).expect("open diagram");
+    let before = app
+        .projects
+        .get(key)
+        .expect("original diagram")
+        .data()
+        .clone();
+    let out = frame(&mut app, &ctx, 1280., 820., 0.8, vec![]);
+    let button = text_rects(&out)
+        .into_iter()
+        .find(|(text, _)| text.contains("Open project in TU4"))
+        .expect("conversion button")
+        .1;
+    pointer_click(&mut app, &ctx, button.center(), 0.9);
+    assert!(matches!(app.screen, Screen::Tu4(_)));
+    let converted = app.project().expect("converted project");
+    assert_eq!(converted.data().prepared_tape, tape);
+    assert_eq!(converted.data().tests, before.tests);
+    assert!(app.projects.get(key).expect("original diagram").data() == &before);
+    assert!(
+        crate::tu4::compile::compile(&converted.tu4().expect("TU4").source, converted.alphabet())
+            .is_ok()
+    );
+}
+
+#[test]
+fn large_tu4_program_uses_paged_editing_and_virtualized_execution() {
+    use crate::ui::test_renderer::text_rects;
+    use std::fmt::Write as _;
+    let ctx = egui::Context::default();
+    let mut app = App::new(&eframe::CreationContext::_new_kittest(ctx.clone()));
+    let mut project = Project::new_tu4(
+        ProjectName::new("Large TU4".into()).expect("name"),
+        ValidatedAlphabet::new([' ', '1']).expect("alphabet"),
+    );
+    let mut source = String::new();
+    for state in 0..400_000 {
+        writeln!(source, "{state},λ,λ,{}", state + 1).expect("String write");
+    }
+    source.push_str("400000,λ,~,0");
+    project
+        .execute(ProjectEdit::SetSource(std::sync::Arc::from(source)), None)
+        .expect("source");
+    let key = app.projects.insert(project);
+    app.open(key).expect("open large project");
+    let out = frame(&mut app, &ctx, 1280., 820., 0.1, vec![]);
+    let labels = text_rects(&out);
+    assert!(
+        labels
+            .iter()
+            .any(|(text, _)| text.contains("Lines 1–1000 of 400001"))
+    );
+    app.dispatch(Command::Invoke(CommandId::OpenRunner), &ctx)
+        .expect("compile large project");
+    let out = frame(&mut app, &ctx, 1280., 820., 0.2, vec![]);
+    assert!(
+        text_rects(&out).len() < 250,
+        "render only visible source lines"
+    );
+    assert!(
+        text_rects(&out)
+            .iter()
+            .any(|(text, _)| text.contains("2500 lines"))
+    );
+    if let Screen::Tu4(w) = &mut app.screen {
+        w.ui.shared.fast = true;
+    }
+    app.dispatch(Command::Invoke(CommandId::Run), &ctx)
+        .expect("run without delay");
+    frame(&mut app, &ctx, 1280., 820., 0.3, vec![]);
+    let Screen::Tu4(w) = &app.screen else {
+        panic!("TU4 screen");
+    };
+    assert!(w.runner.as_ref().expect("runner").session.steps() > 1);
+    app.dispatch(Command::Invoke(CommandId::Pause), &ctx)
+        .expect("pause");
+    let Screen::Tu4(w) = &app.screen else {
+        panic!("TU4 screen");
+    };
+    assert_eq!(
+        w.runner.as_ref().expect("runner").session.status(),
+        RunStatus::Paused
+    );
 }
 
 #[test]
