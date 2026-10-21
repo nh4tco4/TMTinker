@@ -196,6 +196,46 @@ impl CodeEditor {
     }
 }
 
+fn breakpoint_button(
+    ui: &mut egui::Ui,
+    rect: egui::Rect,
+    line: usize,
+    selected: bool,
+    commands: &mut Vec<Command>,
+) {
+    if !ui.is_rect_visible(rect) {
+        return;
+    }
+    let response = ui.interact(
+        rect,
+        ui.id().with(("breakpoint", line)),
+        egui::Sense::click(),
+    );
+    if selected {
+        ui.painter()
+            .circle_filled(rect.center(), 5., egui::Color32::from_rgb(210, 50, 50));
+    } else {
+        ui.painter().circle_stroke(
+            rect.center(),
+            5.,
+            egui::Stroke::new(1., egui::Color32::GRAY),
+        );
+    }
+    if response
+        .on_hover_text(if selected {
+            "Remove breakpoint"
+        } else {
+            "Set breakpoint"
+        })
+        .clicked()
+    {
+        commands.push(Command::Edit {
+            edit: ProjectEdit::ToggleBreakpoint(line),
+            group: None,
+        });
+    }
+}
+
 pub fn editor_page(project: &Project, state: &mut Tu4UiState, ctx: &egui::Context) -> Vec<Command> {
     let mut commands = Vec::new();
     state
@@ -279,12 +319,15 @@ pub fn runner_page(
         let mut scroll = egui::ScrollArea::both()
             .id_salt("tu4_run_scroll")
             .auto_shrink([false, false]);
-        let row_height = ui.text_style_height(&egui::TextStyle::Monospace);
+        let row_height = ui
+            .text_style_height(&egui::TextStyle::Monospace)
+            .max(ui.spacing().interact_size.y);
+        let row_stride = row_height + ui.spacing().item_spacing.y;
+        let padding_rows = (ui.available_height() / row_stride).ceil() as usize;
         if highlight && state.shared.follow_execution {
             if state.followed != Some(key) {
                 if let Some(line) = current {
-                    let offset = (line.saturating_sub(1) as f32
-                        * (row_height + ui.spacing().item_spacing.y)
+                    let offset = (line.saturating_sub(1) as f32 * row_stride
                         - ui.available_height() * 0.4)
                         .max(0.);
                     scroll = scroll.vertical_scroll_offset(offset);
@@ -294,37 +337,65 @@ pub fn runner_page(
         } else {
             state.followed = None;
         }
-        scroll.show_rows(ui, row_height, state.editor.starts.len(), |ui, rows| {
-            for index in rows {
-                let active = highlight && current == Some(index + 1);
-                egui::Frame::new()
-                    .fill(if active {
-                        egui::Color32::from_rgb(215, 241, 225)
-                    } else {
-                        egui::Color32::TRANSPARENT
-                    })
-                    .show(ui, |ui| {
-                        ui.set_min_width(ui.available_width());
-                        ui.horizontal(|ui| {
-                            ui.add_sized(
-                                [60., row_height],
-                                egui::Label::new(
-                                    egui::RichText::new((index + 1).to_string())
-                                        .monospace()
-                                        .weak(),
-                                ),
-                            );
-                            ui.add(
-                                egui::Label::new(
-                                    egui::RichText::new(state.editor.line(index)).monospace(),
-                                )
-                                .extend()
-                                .selectable(false),
-                            );
+        scroll.show_rows(
+            ui,
+            row_height,
+            state.editor.starts.len() + padding_rows,
+            |ui, rows| {
+                for index in rows {
+                    if index >= state.editor.starts.len() {
+                        ui.allocate_space(egui::vec2(1., row_height));
+                        continue;
+                    }
+                    let active = highlight && current == Some(index + 1);
+                    egui::Frame::new()
+                        .fill(if active {
+                            egui::Color32::from_rgb(215, 241, 225)
+                        } else {
+                            egui::Color32::TRANSPARENT
+                        })
+                        .show(ui, |ui| {
+                            ui.set_min_width(ui.available_width());
+                            ui.horizontal(|ui| {
+                                let (rect, _) = ui.allocate_exact_size(
+                                    egui::vec2(20., row_height),
+                                    egui::Sense::hover(),
+                                );
+                                let text = state.editor.line(index);
+                                let code = text.split_once("//").map_or(text, |(code, _)| code);
+                                if !code.trim().is_empty() {
+                                    breakpoint_button(
+                                        ui,
+                                        rect,
+                                        index + 1,
+                                        project
+                                            .tu4()
+                                            .expect("TU4 project")
+                                            .breakpoints
+                                            .contains(&(index + 1)),
+                                        &mut commands,
+                                    );
+                                }
+                                ui.add_sized(
+                                    [60., row_height],
+                                    egui::Label::new(
+                                        egui::RichText::new((index + 1).to_string())
+                                            .monospace()
+                                            .weak(),
+                                    ),
+                                );
+                                ui.add(
+                                    egui::Label::new(
+                                        egui::RichText::new(state.editor.line(index)).monospace(),
+                                    )
+                                    .extend()
+                                    .selectable(false),
+                                );
+                            });
                         });
-                    });
-            }
-        });
+                }
+            },
+        );
     });
     runner::test_dialog(project, session, &mut state.shared, ctx, &mut commands);
     commands
@@ -342,6 +413,7 @@ pub fn cheatsheet(ctx: &egui::Context, open: &mut bool) {
         ui.label("State numbers range from 0 to 4294967295. Execution starts at the state of the first command. Halt ignores the fourth field. Writing the same symbol in the same state continues execution.");
         ui.separator();
         ui.label("Run starts execution; Pause suspends it. Step executes one command. Reset restores the initial tape and state; Stop ends execution. Editor unlocks the source text.");
+        ui.label("Click the circle beside a command to toggle a breakpoint. Execution pauses before that command; Run continues past the current stop and pauses at the next breakpoint. Step crosses a breakpoint. Breakpoints are saved with the project.");
         ui.label("Run without delay executes commands in batches. Programs up to 2500 lines highlight the current command; Follow step execution scrolls to it. Larger programs use pages in the editor.");
         ui.label("Load a test to use its initial tape. The gear edits its initial and expected tapes. Check all six compares results relative to the head, with a step limit per test.");
         ui.label("Tape notation: mark the head with parentheses, for example 01(1)0 or (λ). Save stores the project library; Export saves the project as JSON, including the source, tape and tests.");

@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{collections::BTreeSet, sync::Arc};
 
 use super::compile::{Action, CompiledTu4};
 use crate::{
@@ -14,9 +14,15 @@ pub struct Tu4RunSession {
     status: RunStatus,
     steps: u64,
     fault: Option<String>,
+    breakpoints: BTreeSet<usize>,
+    paused_at_breakpoint: bool,
+    skip_breakpoint_once: bool,
 }
 
 impl Tu4RunSession {
+    pub fn set_breakpoints(&mut self, breakpoints: BTreeSet<usize>) {
+        self.breakpoints = breakpoints;
+    }
     pub fn state_number(&self) -> u32 {
         self.compiled.state_number(self.state)
     }
@@ -27,6 +33,8 @@ impl Tu4RunSession {
     }
     pub fn run(&mut self) {
         if self.status == RunStatus::Paused {
+            self.skip_breakpoint_once = self.paused_at_breakpoint;
+            self.paused_at_breakpoint = false;
             self.status = RunStatus::Running;
         }
     }
@@ -44,6 +52,8 @@ impl Tu4RunSession {
         self.status = RunStatus::Paused;
         self.steps = 0;
         self.fault = None;
+        self.paused_at_breakpoint = false;
+        self.skip_breakpoint_once = false;
     }
     pub fn replace_tape(&mut self, tape: Tape) {
         self.initial_tape = tape;
@@ -63,6 +73,9 @@ impl RunSession for Tu4RunSession {
             status: RunStatus::Paused,
             steps: 0,
             fault: None,
+            breakpoints: BTreeSet::new(),
+            paused_at_breakpoint: false,
+            skip_breakpoint_once: false,
         }
     }
     fn tape(&self) -> &Tape {
@@ -96,6 +109,18 @@ impl RunSession for Tu4RunSession {
         if matches!(self.status, RunStatus::Halted | RunStatus::Faulted) {
             return;
         }
+        if self.status == RunStatus::Running
+            && !self.skip_breakpoint_once
+            && self
+                .line()
+                .is_some_and(|line| self.breakpoints.contains(&line))
+        {
+            self.status = RunStatus::Paused;
+            self.paused_at_breakpoint = true;
+            return;
+        }
+        self.skip_breakpoint_once = false;
+        self.paused_at_breakpoint = false;
         let Some(command) = self.compiled.instruction(self.state, self.tape.read()) else {
             self.fault = Some(format!(
                 "No command for state {} and symbol {:?}",

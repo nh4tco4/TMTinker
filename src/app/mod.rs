@@ -148,6 +148,7 @@ impl App {
             TapeLeftFive | TapeLeft | TapeRight | TapeRightFive | TapeHead => runner,
             BackToEditor => !checking && runner,
             OpenRunner | Validate => workspace && !runner,
+            ToggleBreakpoint => workspace && !diagram && !checking,
             EditSource => workspace && !diagram && !runner,
             OpenTu4 | EditDiagram | AddMachine | RemoveMachine | RenameMachine | OpenMachine
             | PlaceMachine | MachineSettings | Move | Link | Note | Delete | Start | End | Left

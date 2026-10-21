@@ -82,7 +82,8 @@ pub fn render_edges(
             EdgeMeta::Idle
         };
 
-        let (stroke, color) = edge_style(edge_meta);
+        let (mut stroke, color) = edge_style(edge_meta);
+        stroke.width *= viewport.camera_zoom.get();
 
         draw_path(&painter, &points, stroke);
 

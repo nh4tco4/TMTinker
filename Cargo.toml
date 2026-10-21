@@ -3,7 +3,7 @@ name = "tmtinker"
 version = "0.2.0"
 authors = ["nh4tco4 <youtodayhoware@gmail.com>"]
 edition = "2024"
-include = ["LICENSE-APACHE", "LICENSE-MIT", "**/*.rs", "Cargo.toml"]
+include = ["LICENSE-APACHE", "LICENSE-MIT", "**/*.rs", "Cargo.toml", "vendor/ron/**"]
 rust-version = "1.88"
 
 [package.metadata.docs.rs]
@@ -63,6 +63,13 @@ web-sys = { version = "0.3.70", features = [
 
 [profile.release]
 opt-level = 2
+
+# Keep eframe's storage parser linear for large TU4 sources with many newlines.
+[patch.crates-io]
+ron = { path = "vendor/ron" }
+
+[dev-dependencies]
+ron = "0.11.0"
 
 [profile.dev.package."*"]
 opt-level = 2

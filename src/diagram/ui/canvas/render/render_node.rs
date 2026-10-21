@@ -136,7 +136,7 @@ fn node_shape(screen_pos: egui::Pos2, meta: NodeMeta, zoom: f32) -> Shape {
         rect,
         BUTTON_CORNER_RADIUS,
         fill,
-        egui::Stroke::new(NODE_STROKE_WIDTH, stroke_color),
+        egui::Stroke::new(NODE_STROKE_WIDTH * zoom, stroke_color),
         egui::StrokeKind::Middle,
     ))
 }

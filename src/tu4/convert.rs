@@ -45,6 +45,7 @@ pub fn convert(document: &DiagramDocument) -> Result<Tu4Document, String> {
     Ok(Tu4Document {
         alphabet: document.alphabet().clone(),
         source: Arc::from(converter.source),
+        breakpoints: Default::default(),
     })
 }
 

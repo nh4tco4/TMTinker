@@ -1058,10 +1058,10 @@ fn conversion_button_opens_a_separate_tu4_project_with_tape_and_tests() {
     let out = frame(&mut app, &ctx, 1280., 820., 0.8, vec![]);
     let button = text_rects(&out)
         .into_iter()
-        .find(|(text, _)| text.contains("Open project in TU4"))
+        .find(|(text, _)| text == "Open in TU4")
         .expect("conversion button")
         .1;
-    pointer_click(&mut app, &ctx, button.center(), 0.9);
+    pointer_click(&mut app, &ctx, button.center() - egui::vec2(0., 40.), 0.9);
     assert!(matches!(app.screen, Screen::Tu4(_)));
     let converted = app.project().expect("converted project");
     assert_eq!(converted.data().prepared_tape, tape);
@@ -2079,4 +2079,135 @@ fn canvas_pans_with_both_touchpad_axes_and_shift_wheel() {
         before,
         "scrolling a sidebar does not pan the canvas"
     );
+}
+
+#[test]
+fn tu4_gutter_toggles_breakpoints_only_in_runner() {
+    let ctx = egui::Context::default();
+    let mut app = App::new(&eframe::CreationContext::_new_kittest(ctx.clone()));
+    app.dispatch(
+        Command::CreateTu4 {
+            name: ProjectName::new("Debug".into()).unwrap(),
+            alphabet: ValidatedAlphabet::new([' ', '1']).unwrap(),
+        },
+        &ctx,
+    )
+    .unwrap();
+    app.dispatch(
+        Command::Edit {
+            edit: ProjectEdit::SetSource(std::sync::Arc::from("0,λ,>,1\n1,λ,~,0\n")),
+            group: None,
+        },
+        &ctx,
+    )
+    .unwrap();
+    let circle = |out: &egui::FullOutput| {
+        out.shapes.iter().find_map(|shape| match &shape.shape {
+            egui::Shape::Circle(circle)
+                if circle.radius == 5. && circle.stroke.color == egui::Color32::GRAY =>
+            {
+                Some(circle.center)
+            }
+            _ => None,
+        })
+    };
+    let out = frame(&mut app, &ctx, 1280., 820., 0.1, vec![]);
+    assert!(circle(&out).is_none(), "editor has no breakpoint circles");
+    app.dispatch(Command::Invoke(CommandId::OpenRunner), &ctx)
+        .unwrap();
+    let out = frame(&mut app, &ctx, 1280., 820., 0.2, vec![]);
+    pointer_click(
+        &mut app,
+        &ctx,
+        circle(&out).expect("runner breakpoint"),
+        0.21,
+    );
+    assert!(
+        app.project()
+            .unwrap()
+            .tu4()
+            .unwrap()
+            .breakpoints
+            .contains(&1)
+    );
+    let out = frame(&mut app, &ctx, 1280., 820., 0.3, vec![]);
+    pointer_click(
+        &mut app,
+        &ctx,
+        circle(&out).expect("second breakpoint"),
+        0.4,
+    );
+    assert!(
+        app.project()
+            .unwrap()
+            .tu4()
+            .unwrap()
+            .breakpoints
+            .contains(&2)
+    );
+    app.dispatch(Command::Invoke(CommandId::Run), &ctx).unwrap();
+    frame(&mut app, &ctx, 1280., 820., 10., vec![]);
+    let Screen::Tu4(w) = &app.screen else {
+        panic!("TU4 screen");
+    };
+    let session = &w.runner.as_ref().unwrap().session;
+    assert_eq!(session.status(), RunStatus::Paused);
+    assert_eq!(session.steps(), 0);
+}
+
+#[test]
+fn tu4_follow_keeps_the_last_command_stable_with_space_below() {
+    use crate::ui::test_renderer::text_rects;
+    let ctx = egui::Context::default();
+    let mut app = App::new(&eframe::CreationContext::_new_kittest(ctx.clone()));
+    app.dispatch(
+        Command::CreateTu4 {
+            name: ProjectName::new("Scroll".into()).unwrap(),
+            alphabet: ValidatedAlphabet::new([' ', '1']).unwrap(),
+        },
+        &ctx,
+    )
+    .unwrap();
+    let mut source = (0..99)
+        .map(|state| format!("{state},λ,>,{}\n", state + 1))
+        .collect::<String>();
+    source.push_str("99,λ,~,0");
+    app.dispatch(
+        Command::Edit {
+            edit: ProjectEdit::SetSource(source.into()),
+            group: None,
+        },
+        &ctx,
+    )
+    .unwrap();
+    app.dispatch(Command::Invoke(CommandId::OpenRunner), &ctx)
+        .unwrap();
+    frame(&mut app, &ctx, 1280., 820., 0.1, vec![]);
+    for _ in 0..99 {
+        app.dispatch(Command::Invoke(CommandId::Step), &ctx)
+            .unwrap();
+    }
+    let mut positions = Vec::new();
+    for tick in 0..5 {
+        let out = frame(&mut app, &ctx, 1280., 820., 1. + tick as f64, vec![]);
+        positions.push(
+            text_rects(&out)
+                .iter()
+                .find(|(text, _)| text == "99,λ,~,0")
+                .expect("last command visible")
+                .1
+                .center()
+                .y,
+        );
+    }
+    for y in &positions {
+        assert!(
+            *y > 100. && *y < 500.,
+            "last command should have room below: {positions:?}"
+        );
+        assert!(
+            (y - positions[0]).abs() < 1.,
+            "scroll position changed: {positions:?}"
+        );
+    }
 }

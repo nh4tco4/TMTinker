@@ -487,3 +487,95 @@ fn recursion_is_rejected_by_edits_import_and_compiler() {
     );
     assert!(direct.validate_calls().is_err());
 }
+
+#[test]
+fn breakpoints_pause_before_commands_resume_once_and_rearm_in_loops() {
+    let mut run = session("// comment\n0,λ,>,1\n1,λ,<,0");
+    run.set_breakpoints([2, 3].into());
+    run.run();
+    run.step();
+    assert_eq!(run.status(), RunStatus::Paused);
+    assert_eq!(run.steps(), 0);
+    assert_eq!(run.tape().head_position(), 0);
+    run.run();
+    run.step();
+    assert_eq!(run.steps(), 1);
+    assert_eq!(run.tape().head_position(), 1);
+    run.step();
+    assert_eq!(run.status(), RunStatus::Paused);
+    assert_eq!(run.line(), Some(3));
+    run.run();
+    run.step();
+    run.step();
+    assert_eq!(run.status(), RunStatus::Paused);
+    assert_eq!(run.steps(), 2);
+    assert_eq!(run.line(), Some(2));
+    run.step(); // Manual stepping crosses the breakpoint.
+    assert_eq!(run.steps(), 3);
+    run.reset();
+    run.run();
+    run.step();
+    assert_eq!(run.status(), RunStatus::Paused);
+    assert_eq!(run.steps(), 0);
+}
+
+#[test]
+fn breakpoint_on_halt_and_removing_a_breakpoint_allow_completion() {
+    let mut run = session("0,λ,>,1\n1,λ,~,0");
+    run.set_breakpoints([2].into());
+    run.run();
+    run.step();
+    run.step();
+    assert_eq!(run.status(), RunStatus::Paused);
+    assert_eq!(run.steps(), 1);
+    run.run();
+    run.step();
+    assert_eq!(run.status(), RunStatus::Halted);
+    assert_eq!(run.steps(), 2);
+    run.reset();
+    run.set_breakpoints(Default::default());
+    run.run();
+    run.step();
+    run.step();
+    assert_eq!(run.status(), RunStatus::Halted);
+}
+
+#[test]
+fn fast_runner_stops_inside_a_batch_at_a_breakpoint() {
+    let mut run = session("0,λ,>,1\n1,λ,>,2\n2,λ,~,0");
+    run.set_breakpoints([2].into());
+    let mut ui = crate::shared::runner::SharedRunnerUiState::new(&Tape::new());
+    ui.fast = true;
+    let ctx = egui::Context::default();
+    run.run();
+    crate::shared::runner::tick(&mut run, &mut ui, 1., &ctx);
+    assert_eq!(run.status(), RunStatus::Paused);
+    assert_eq!(run.steps(), 1);
+    assert_eq!(run.tape().head_position(), 1);
+    run.run();
+    crate::shared::runner::tick(&mut run, &mut ui, 2., &ctx);
+    assert_eq!(run.status(), RunStatus::Halted);
+    assert_eq!(run.steps(), 3);
+}
+
+#[test]
+fn breakpoint_history_and_persistence_accept_older_documents() {
+    let mut project = Project::new_tu4(ProjectName::new("Debug".into()).unwrap(), alphabet());
+    project
+        .execute(ProjectEdit::SetSource(Arc::from("0,λ,~,0\n")), None)
+        .unwrap();
+    project
+        .execute(ProjectEdit::ToggleBreakpoint(1), None)
+        .unwrap();
+    let encoded = persistence::encode_project(&project).unwrap();
+    let restored = persistence::decode_project(&encoded).unwrap();
+    assert!(restored.tu4().unwrap().breakpoints.contains(&1));
+    project.undo();
+    assert!(project.tu4().unwrap().breakpoints.is_empty());
+    project.redo();
+    assert!(project.tu4().unwrap().breakpoints.contains(&1));
+    let mut old = serde_json::to_value(project.tu4().unwrap()).unwrap();
+    old.as_object_mut().unwrap().remove("breakpoints");
+    let old: super::model::Tu4Document = serde_json::from_value(old).unwrap();
+    assert!(old.breakpoints.is_empty());
+}

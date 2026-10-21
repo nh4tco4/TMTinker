@@ -2729,8 +2729,6 @@ dependencies = [
 [[package]]
 name = "ron"
 version = "0.11.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "db09040cc89e461f1a265139777a2bde7f8d8c67c4936f700c63ce3e2904d468"
 dependencies = [
  "base64",
  "bitflags 2.12.1",
@@ -3134,6 +3132,7 @@ dependencies = [
  "js-sys",
  "log",
  "rfd",
+ "ron",
  "serde",
  "serde_json",
  "slotmap",

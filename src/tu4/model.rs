@@ -6,6 +6,8 @@ use crate::core::alphabet::ValidatedAlphabet;
 pub struct Tu4Document {
     pub alphabet: ValidatedAlphabet,
     pub source: Arc<str>,
+    #[serde(default)]
+    pub breakpoints: std::collections::BTreeSet<usize>,
 }
 
 impl Tu4Document {
@@ -13,6 +15,7 @@ impl Tu4Document {
         Self {
             alphabet,
             source: Arc::from(""),
+            breakpoints: Default::default(),
         }
     }
 }

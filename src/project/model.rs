@@ -77,6 +77,7 @@ pub enum TransactionKey {
 
 pub enum ProjectEdit {
     SetSource(Arc<str>),
+    ToggleBreakpoint(usize),
     ReplaceMachine {
         key: SubmachineKey,
         machine: Box<SubmachineDocument>,
@@ -98,6 +99,7 @@ impl ProjectEdit {
     pub fn label(&self) -> &'static str {
         match self {
             Self::SetSource(_) => "Edit quadruples",
+            Self::ToggleBreakpoint(_) => "Toggle breakpoint",
             Self::ReplaceMachine { .. } => "Edit diagram",
             Self::AddMachine(_) => "Create submachine",
             Self::RemoveMachine(_) => "Delete submachine",
@@ -209,6 +211,17 @@ impl Project {
         let before = self.data.clone();
         let label = edit.label().to_owned();
         match edit {
+            ProjectEdit::ToggleBreakpoint(line) => {
+                let ProjectDocument::Tu4(document) = &mut self.data.document else {
+                    return Err("Breakpoints require a TU4 project".into());
+                };
+                if line == 0 || line > document.source.lines().count() {
+                    return Err("Breakpoint line does not exist".into());
+                }
+                if !document.breakpoints.remove(&line) {
+                    document.breakpoints.insert(line);
+                }
+            }
             ProjectEdit::SetSource(source) => {
                 let ProjectDocument::Tu4(document) = &mut self.data.document else {
                     return Err("Source editing requires a TU4 project".into());

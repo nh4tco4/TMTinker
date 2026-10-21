@@ -79,6 +79,9 @@ impl App {
                 self.dirty = true;
                 w.ui.error = None;
                 if let Some(runner) = &mut w.runner {
+                    runner
+                        .session
+                        .set_breakpoints(project.tu4().expect("TU4 project").breakpoints.clone());
                     runner.checks = None;
                 }
             }
@@ -332,10 +335,14 @@ impl App {
                     if run {
                         w.ui.shared.sync_tape(&project.data().prepared_tape);
                         w.runner = Some(Tu4RunnerWorkspace {
-                            session: crate::tu4::runtime::Tu4RunSession::new(
-                                compiled,
-                                project.data().prepared_tape.clone(),
-                            ),
+                            session: {
+                                let mut session = crate::tu4::runtime::Tu4RunSession::new(
+                                    compiled,
+                                    project.data().prepared_tape.clone(),
+                                );
+                                session.set_breakpoints(document.breakpoints.clone());
+                                session
+                            },
                             checks: None,
                         });
                     } else {

@@ -90,7 +90,8 @@ impl SelectionState {
 pub struct Zoom(f32);
 
 impl Zoom {
-    const MAX: f32 = 10.0;
+    // Zoom is inversed.
+    const MAX: f32 = 2.0;
     const MIN: f32 = 0.25;
     pub const UNIT: Zoom = Zoom(1.0);
 

@@ -28,6 +28,7 @@ pub enum CommandId {
     EditDiagram,
     EditSource,
     OpenTu4,
+    ToggleBreakpoint,
     AddMachine,
     RemoveMachine,
     RenameMachine,
@@ -104,6 +105,7 @@ pub static REGISTRY: &[CommandInfo] = &[
     entry!(Stop, "Stop", "■", D, true),
     entry!(EditDiagram, "Edit diagram", "◇"),
     entry!(EditSource, "Edit quadruples", "✎"),
+    entry!(ToggleBreakpoint, "Toggle breakpoint", "●"),
     entry!(OpenTu4, "Open project in TU4", "↗"),
     entry!(AddMachine, "New submachine", "+", N, true),
     entry!(RemoveMachine, "Delete submachine", "×"),
@@ -184,6 +186,7 @@ impl Command {
             Self::DeleteProject(_) => DeleteProject,
             Self::Edit { edit, .. } => match edit {
                 ProjectEdit::SetSource(_) => EditSource,
+                ProjectEdit::ToggleBreakpoint(_) => ToggleBreakpoint,
                 ProjectEdit::ReplaceMachine { .. } => EditDiagram,
                 ProjectEdit::AddMachine(_) => AddMachine,
                 ProjectEdit::RemoveMachine(_) => RemoveMachine,

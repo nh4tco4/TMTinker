@@ -20,6 +20,7 @@ pub fn control_panel(project: &Project, ui: &mut egui::Ui, commands: &mut Vec<Co
             CommandId::Export,
             CommandId::Menu,
             CommandId::Cheatsheet,
+            CommandId::OpenTu4,
         ]
         .into_iter()
         .enumerate()
@@ -27,6 +28,7 @@ pub fn control_panel(project: &Project, ui: &mut egui::Ui, commands: &mut Vec<Co
             let enabled = match id {
                 CommandId::Undo => project.can_undo(),
                 CommandId::Redo => project.can_redo(),
+                CommandId::OpenTu4 => !project.is_tu4(),
                 _ => true,
             };
             let info = id.info();
@@ -38,6 +40,7 @@ pub fn control_panel(project: &Project, ui: &mut egui::Ui, commands: &mut Vec<Co
                     match id {
                         CommandId::OpenRunner => "Run",
                         CommandId::Export => "Export",
+                        CommandId::OpenTu4 => "Open in TU4",
                         _ => info.label,
                     },
                     shortcut.as_deref(),
@@ -66,10 +69,11 @@ pub fn control_panel(project: &Project, ui: &mut egui::Ui, commands: &mut Vec<Co
                 ui.end_row();
             }
         }
+        ui.add_enabled_ui(false, |ui| {
+            tool_button(ui, "camera", "Screenshot", None, false);
+        });
+        ui.end_row();
     });
-    if !project.is_tu4() && crate::commands::button(ui, CommandId::OpenTu4, true).clicked() {
-        commands.push(Command::Invoke(CommandId::OpenTu4));
-    }
     ui.add_space(16.);
     ui.separator();
     ui.add_space(8.);

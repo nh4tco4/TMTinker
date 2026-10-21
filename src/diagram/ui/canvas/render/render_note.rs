@@ -40,7 +40,12 @@ pub fn render_notes(
         let screen_position = rect.min;
         let bg_size = rect.size();
 
-        painter.add(note_shape(screen_position, bg_size, meta));
+        painter.add(note_shape(
+            screen_position,
+            bg_size,
+            meta,
+            viewport.camera_zoom.get(),
+        ));
 
         let text_pos = screen_position + egui::Vec2::new(bg_size.x / 2.0, bg_size.y / 2.0);
         painter.text(
@@ -66,7 +71,7 @@ pub fn note_rect(note: &Note, viewport: &ViewportState, painter: &Painter) -> eg
     )
 }
 
-fn note_shape(screen_pos: egui::Pos2, size: egui::Vec2, meta: NoteMeta) -> Shape {
+fn note_shape(screen_pos: egui::Pos2, size: egui::Vec2, meta: NoteMeta, zoom: f32) -> Shape {
     let (stroke_color, fill) = match meta {
         NoteMeta::Idle => (IDLE_NODE_STROKE, IDLE_NODE_FILL),
         NoteMeta::Selected => (SELECTED_NODE_STROKE, SELECTED_NODE_FILL),
@@ -79,7 +84,7 @@ fn note_shape(screen_pos: egui::Pos2, size: egui::Vec2, meta: NoteMeta) -> Shape
         rect,
         NOTE_CORNER_RADIUS,
         fill,
-        egui::Stroke::new(NODE_STROKE_WIDTH, stroke_color),
+        egui::Stroke::new(NODE_STROKE_WIDTH * zoom, stroke_color),
         egui::StrokeKind::Middle,
     ))
 }
