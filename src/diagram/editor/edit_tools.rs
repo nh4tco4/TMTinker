@@ -20,6 +20,7 @@ pub fn link_tool(
     clicked: Option<SelectableKey>,
 ) {
     let Some(SelectableKey::Node(clicked_node)) = clicked else {
+        *link_source = None;
         return;
     };
 

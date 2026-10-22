@@ -10,6 +10,7 @@ pub struct DiagramEditorSession {
     canvases: SecondaryMap<SubmachineKey, CanvasEditorState>,
     compile_error: Option<String>,
     compile_error_started: Option<f64>,
+    clipboard: Option<super::clipboard::CanvasClipboard>,
 }
 
 pub struct CanvasEditorState {
@@ -34,11 +35,30 @@ impl DiagramEditorSession {
             canvases: SecondaryMap::new(),
             compile_error: None,
             compile_error_started: None,
+            clipboard: None,
         }
     }
 
     pub fn active_submachine(&self) -> SubmachineKey {
         self.active_submachine
+    }
+
+    pub fn handle_clipboard(
+        &mut self,
+        document: &mut crate::diagram::model::document::SubmachineDocument,
+        ctx: &egui::Context,
+    ) {
+        let canvas = self
+            .canvases
+            .entry(self.active_submachine)
+            .expect("active machine")
+            .or_default();
+        super::clipboard::handle_clipboard(
+            &mut self.clipboard,
+            document,
+            &mut canvas.interaction.selection_state,
+            ctx,
+        );
     }
 
     pub fn open_submachine(&mut self, key: SubmachineKey) {

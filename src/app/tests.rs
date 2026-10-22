@@ -1713,6 +1713,11 @@ fn node_hover_and_selection_override_problem_colors() {
     );
     assert_eq!(node_rect(&hover).stroke.color, theme::SELECTED_NODE_STROKE);
     assert_ne!(node_rect(&hover).fill, theme::PROBLEM_NODE_FILL);
+    for i in 0..20 {
+        let hover = frame(&mut app, &ctx, 1280., 820., 0.11 + i as f64 * 0.001, vec![]);
+        assert_eq!(node_rect(&hover).stroke.color, theme::SELECTED_NODE_STROKE);
+        assert_ne!(node_rect(&hover).fill, theme::PROBLEM_NODE_FILL);
+    }
     if let Screen::Diagram(w) = &mut app.screen {
         w.editor
             .canvas_mut(active)
@@ -1726,6 +1731,391 @@ fn node_hover_and_selection_override_problem_colors() {
         theme::SELECTED_NODE_STROKE
     );
     assert_eq!(node_rect(&selected).fill, theme::SELECTED_NODE_FILL);
+}
+
+#[test]
+fn wasd_moves_mixed_selection_without_switching_tools_and_undo_restores_it() {
+    use crate::diagram::editor::session::SelectableKey;
+    let ctx = egui::Context::default();
+    let mut app = App::new(&eframe::CreationContext::_new_kittest(ctx.clone()));
+    let mut document = fixture(false).document().clone();
+    let active = document.entry_submachine();
+    let machine = document.submachine_mut(active).unwrap();
+    let note = machine
+        .layout_mut()
+        .add_note(LayoutPos::new(450., 375.), "Note".into());
+    let node = machine.machine().nodes_iter().next().unwrap().0;
+    let before = machine.clone();
+    let key = app.projects.insert(Project::new(
+        ProjectName::new("Move".into()).unwrap(),
+        document,
+    ));
+    app.open(key).unwrap();
+    let Screen::Diagram(w) = &mut app.screen else {
+        panic!("diagram")
+    };
+    let tool = w.editor.tool().clone();
+    w.editor
+        .canvas_mut(active)
+        .interaction
+        .selection_state
+        .selected = vec![SelectableKey::Node(node), SelectableKey::Note(note)];
+    frame(&mut app, &ctx, 1280., 820., 0., vec![]);
+    for (i, key) in [egui::Key::W, egui::Key::A, egui::Key::S, egui::Key::D]
+        .into_iter()
+        .enumerate()
+    {
+        frame(
+            &mut app,
+            &ctx,
+            1280.,
+            820.,
+            0.1 + i as f64 * 0.1,
+            key_press(key),
+        );
+        let Screen::Diagram(w) = &mut app.screen else {
+            panic!("diagram")
+        };
+        assert!(*w.editor.tool() == tool);
+    }
+    assert!(app.projects[key].document().submachine(active).unwrap() == &before);
+    app.dispatch(Command::Invoke(CommandId::Undo), &ctx)
+        .unwrap();
+    let machine = app.projects[key].document().submachine(active).unwrap();
+    assert_eq!(
+        machine.layout().get_node_position(node),
+        before
+            .layout()
+            .get_node_position(node)
+            .map(|p| p + LayoutPos::new(-75., 0.))
+    );
+    assert_eq!(
+        machine.layout().notes_iter().next().unwrap().1.position,
+        LayoutPos::new(375., 375.)
+    );
+}
+
+#[test]
+fn canvas_copy_paste_remaps_edges_and_notes_within_one_project() {
+    use crate::diagram::editor::session::SelectableKey;
+    let ctx = egui::Context::default();
+    let mut app = App::new(&eframe::CreationContext::_new_kittest(ctx.clone()));
+    let mut document = fixture(false).document().clone();
+    let main = document.entry_submachine();
+    let child = document.add_submachine(SubmachineName::parse("Child".into()).unwrap());
+    let machine = document.submachine_mut(main).unwrap();
+    let node_keys: Vec<_> = machine.machine().nodes_iter().map(|(key, _)| key).collect();
+    let note = machine
+        .layout_mut()
+        .add_note(LayoutPos::new(450., 375.), "Copied note".into());
+    let call = machine.add_node(
+        LayoutPos::new(900., 225.),
+        NodeAction::Call {
+            target: child,
+            repeat: std::num::NonZeroU32::new(1).unwrap(),
+        },
+    );
+    let inverse_edge = machine.machine().edges_iter().next().unwrap().0;
+    machine
+        .machine_mut()
+        .get_edge_mut(inverse_edge)
+        .unwrap()
+        .set_inverse(true);
+    let key = app.projects.insert(Project::new(
+        ProjectName::new("Copy".into()).unwrap(),
+        document,
+    ));
+    app.open(key).unwrap();
+    let Screen::Diagram(w) = &mut app.screen else {
+        panic!("diagram")
+    };
+    w.editor
+        .canvas_mut(main)
+        .interaction
+        .selection_state
+        .selected = vec![
+        SelectableKey::Node(node_keys[0]),
+        SelectableKey::Node(node_keys[1]),
+        SelectableKey::Node(call),
+        SelectableKey::Note(note),
+    ];
+    frame(&mut app, &ctx, 1280., 820., 0., vec![]);
+    let copied = frame(&mut app, &ctx, 1280., 820., 0.1, vec![egui::Event::Copy]);
+    let marker = copied
+        .platform_output
+        .commands
+        .iter()
+        .find_map(|command| {
+            if let egui::OutputCommand::CopyText(text) = command {
+                Some(text.clone())
+            } else {
+                None
+            }
+        })
+        .expect("system clipboard marker");
+    app.dispatch(Command::OpenMachine(child), &ctx).unwrap();
+    frame(
+        &mut app,
+        &ctx,
+        1280.,
+        820.,
+        0.2,
+        vec![egui::Event::Paste(marker.clone())],
+    );
+    let machine = app.projects[key].document().submachine(child).unwrap();
+    assert_eq!(machine.machine().nodes_iter().count(), 2);
+    assert_eq!(machine.machine().edges_iter().count(), 1);
+    let edge = machine.machine().edges_iter().next().unwrap().1;
+    assert!(edge.inverse());
+    assert_eq!(
+        machine.machine().get_node(edge.source()).unwrap().action(),
+        &NodeAction::Start
+    );
+    assert_eq!(
+        machine.machine().get_node(edge.target()).unwrap().action(),
+        &NodeAction::Write('1')
+    );
+    assert_eq!(
+        machine.layout().get_node_position(edge.source()),
+        Some(LayoutPos::new(525., 300.))
+    );
+    let copied_note = machine.layout().notes_iter().next().unwrap().1;
+    assert_eq!(copied_note.content, "Copied note");
+    assert_eq!(copied_note.position, LayoutPos::new(525., 450.));
+    app.dispatch(Command::Invoke(CommandId::Undo), &ctx)
+        .unwrap();
+    assert_eq!(
+        app.projects[key]
+            .document()
+            .submachine(child)
+            .unwrap()
+            .machine()
+            .nodes_iter()
+            .count(),
+        0
+    );
+    app.dispatch(Command::Invoke(CommandId::Redo), &ctx)
+        .unwrap();
+    // Browsers can deliver the raw shortcut before the clipboard event.
+    let events = [true, false]
+        .into_iter()
+        .map(|pressed| egui::Event::Key {
+            key: egui::Key::V,
+            physical_key: Some(egui::Key::V),
+            pressed,
+            repeat: false,
+            modifiers: egui::Modifiers::COMMAND,
+        })
+        .collect();
+    frame(&mut app, &ctx, 1280., 820., 0.3, events);
+    assert_eq!(
+        app.projects[key]
+            .document()
+            .submachine(child)
+            .unwrap()
+            .machine()
+            .nodes_iter()
+            .count(),
+        2
+    );
+    frame(
+        &mut app,
+        &ctx,
+        1280.,
+        820.,
+        0.31,
+        vec![egui::Event::Paste(marker.clone())],
+    );
+    assert_eq!(
+        app.projects[key]
+            .document()
+            .submachine(child)
+            .unwrap()
+            .machine()
+            .nodes_iter()
+            .count(),
+        4
+    );
+    let other = app.projects.insert(fixture(false));
+    app.open(other).unwrap();
+    let before = app.projects[other].data().clone();
+    frame(
+        &mut app,
+        &ctx,
+        1280.,
+        820.,
+        0.4,
+        vec![egui::Event::Paste(marker)],
+    );
+    assert!(app.projects[other].data() == &before);
+}
+
+#[test]
+fn empty_canvas_click_cancels_link_before_starting_a_new_one() {
+    use crate::diagram::editor::tool::{EditTools, EditorTool};
+    let ctx = egui::Context::default();
+    let mut app = App::new(&eframe::CreationContext::_new_kittest(ctx.clone()));
+    let mut document = DiagramDocument::new(ValidatedAlphabet::new([' ', '1']).unwrap());
+    let active = document.entry_submachine();
+    let machine = document.submachine_mut(active).unwrap();
+    let first = machine.add_node(LayoutPos::new(450., 225.), NodeAction::Start);
+    let second = machine.add_node(LayoutPos::new(600., 225.), NodeAction::Stop);
+    let key = app.projects.insert(Project::new(
+        ProjectName::new("Link".into()).unwrap(),
+        document,
+    ));
+    app.open(key).unwrap();
+    app.dispatch(Command::SelectTool(EditorTool::Edit(EditTools::Link)), &ctx)
+        .unwrap();
+    frame(&mut app, &ctx, 1280., 820., 0., vec![]);
+    pointer_click(&mut app, &ctx, egui::pos2(450., 225.), 0.1);
+    let Screen::Diagram(w) = &mut app.screen else {
+        panic!("diagram")
+    };
+    assert_eq!(
+        w.editor.canvas_mut(active).interaction.link_source,
+        Some(first)
+    );
+    pointer_click(&mut app, &ctx, egui::pos2(450., 450.), 0.2);
+    let Screen::Diagram(w) = &mut app.screen else {
+        panic!("diagram")
+    };
+    assert_eq!(w.editor.canvas_mut(active).interaction.link_source, None);
+    pointer_click(&mut app, &ctx, egui::pos2(600., 225.), 0.3);
+    assert_eq!(
+        app.projects[key]
+            .document()
+            .submachine(active)
+            .unwrap()
+            .machine()
+            .edges_iter()
+            .count(),
+        0
+    );
+    let Screen::Diagram(w) = &mut app.screen else {
+        panic!("diagram")
+    };
+    assert_eq!(
+        w.editor.canvas_mut(active).interaction.link_source,
+        Some(second)
+    );
+}
+
+#[test]
+fn hover_uses_the_painted_position_in_the_same_frame_as_canvas_pan() {
+    use crate::ui::theme;
+    let ctx = egui::Context::default();
+    let mut app = App::new(&eframe::CreationContext::_new_kittest(ctx.clone()));
+    let mut document = DiagramDocument::new(ValidatedAlphabet::new([' ', '1']).unwrap());
+    let active = document.entry_submachine();
+    document
+        .submachine_mut(active)
+        .unwrap()
+        .add_node(LayoutPos::new(450., 225.), NodeAction::Start);
+    let key = app.projects.insert(Project::new(
+        ProjectName::new("Hover".into()).unwrap(),
+        document,
+    ));
+    app.open(key).unwrap();
+    frame(&mut app, &ctx, 1280., 820., 0., vec![]);
+    frame(
+        &mut app,
+        &ctx,
+        1280.,
+        820.,
+        0.1,
+        vec![egui::Event::PointerMoved(egui::pos2(450., 225.))],
+    );
+    let out = frame(
+        &mut app,
+        &ctx,
+        1280.,
+        820.,
+        0.2,
+        vec![egui::Event::MouseWheel {
+            unit: egui::MouseWheelUnit::Point,
+            delta: egui::vec2(300., 0.),
+            modifiers: egui::Modifiers::NONE,
+        }],
+    );
+    let Screen::Diagram(w) = &mut app.screen else {
+        panic!("diagram")
+    };
+    let canvas = w.editor.canvas_mut(active);
+    assert!(canvas.viewport.camera_pan.x > theme::NODE_SIZE);
+    assert_eq!(canvas.interaction.selection_state.hovered, None);
+    let center = canvas.viewport.world_to_screen(LayoutPos::new(450., 225.));
+    let rect = out
+        .shapes
+        .iter()
+        .find_map(|shape| match &shape.shape {
+            egui::Shape::Rect(rect) if rect.rect.center().distance(center.into()) < 0.1 => {
+                Some(rect)
+            }
+            _ => None,
+        })
+        .unwrap();
+    assert_eq!(rect.fill, theme::PROBLEM_NODE_FILL);
+}
+
+#[test]
+fn call_labels_use_two_unicode_characters_and_follow_renames_in_editor_and_runner() {
+    use crate::ui::test_renderer::text_rects;
+    let ctx = egui::Context::default();
+    let mut app = App::new(&eframe::CreationContext::_new_kittest(ctx.clone()));
+    let mut document = fixture(false).document().clone();
+    let main = document.entry_submachine();
+    let child = document.add_submachine(SubmachineName::parse("Демонстрация".into()).unwrap());
+    let alphabet = document.alphabet().clone();
+    let machine = document.submachine_mut(child).unwrap();
+    let start = machine.add_node(LayoutPos::new(450., 225.), NodeAction::Start);
+    let stop = machine.add_node(LayoutPos::new(600., 225.), NodeAction::Stop);
+    machine
+        .add_edge(
+            TransitionSymbols::new(alphabet.clone_iter(), &alphabet).unwrap(),
+            start,
+            stop,
+        )
+        .unwrap();
+    let machine = document.submachine_mut(main).unwrap();
+    let write = machine
+        .machine()
+        .nodes_iter()
+        .find(|(_, node)| matches!(node.action(), NodeAction::Write(_)))
+        .unwrap()
+        .0;
+    machine
+        .machine_mut()
+        .get_mut_node(write)
+        .unwrap()
+        .set_action(NodeAction::Call {
+            target: child,
+            repeat: std::num::NonZeroU32::new(1).unwrap(),
+        });
+    let key = app.projects.insert(Project::new(
+        ProjectName::new("Labels".into()).unwrap(),
+        document,
+    ));
+    app.open(key).unwrap();
+    let out = frame(&mut app, &ctx, 1280., 820., 0., vec![]);
+    assert!(text_rects(&out).iter().any(|(text, _)| text == "Де"));
+    app.dispatch(
+        Command::Edit {
+            edit: ProjectEdit::RenameMachine {
+                key: child,
+                name: SubmachineName::parse("Я".into()).unwrap(),
+            },
+            group: None,
+        },
+        &ctx,
+    )
+    .unwrap();
+    let out = frame(&mut app, &ctx, 1280., 820., 0.1, vec![]);
+    assert!(text_rects(&out).iter().any(|(text, _)| text == "Я"));
+    app.dispatch(Command::Invoke(CommandId::OpenRunner), &ctx)
+        .unwrap();
+    let out = frame(&mut app, &ctx, 1280., 820., 0.2, vec![]);
+    assert!(text_rects(&out).iter().any(|(text, _)| text == "Я"));
 }
 
 #[test]

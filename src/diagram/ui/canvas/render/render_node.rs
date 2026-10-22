@@ -1,10 +1,9 @@
 use egui::{Color32, Painter, Rect, Shape, Vec2, epaint::RectShape};
 
 use crate::{
-    core::alphabet::ValidatedAlphabet,
     diagram::compile::diagnostics::node_problems,
     diagram::editor::session::{SelectableKey, SelectionState, ViewportState},
-    diagram::model::layout::GraphLayout,
+    diagram::model::{document::DiagramDocument, layout::GraphLayout},
     diagram::model::{
         node::{Direction, NodeAction},
         submachine::{NodeKey, Submachine},
@@ -28,7 +27,7 @@ enum NodeMeta {
 pub fn render_nodes(
     graph: &GraphLayout,
     machine: &Submachine,
-    alphabet: &ValidatedAlphabet,
+    document: &DiagramDocument,
     viewport: &ViewportState,
     selection_state: &SelectionState,
     executing_node: Option<NodeKey>,
@@ -51,7 +50,7 @@ pub fn render_nodes(
         let text_position =
             Rect::from_center_size(screen_position.into(), Vec2::splat(NODE_SIZE)).center();
 
-        let is_problematic = !node_problems(machine, alphabet, key).is_empty();
+        let is_problematic = !node_problems(machine, document.alphabet(), key).is_empty();
         let is_hovered = Some(key) == hovered_key;
         let is_selected = selection_state.selected_node_keys().contains(&key);
 
@@ -78,7 +77,7 @@ pub fn render_nodes(
         painter.text(
             text_position.into(),
             egui::Align2::CENTER_CENTER,
-            match_node_label(&node.action()),
+            match_node_label(node.action(), document),
             egui::FontId::proportional(ICON_FONT_SIZE * viewport.camera_zoom.get()),
             text_color,
         );
@@ -141,7 +140,7 @@ fn node_shape(screen_pos: egui::Pos2, meta: NodeMeta, zoom: f32) -> Shape {
     ))
 }
 
-fn match_node_label(action: &NodeAction) -> String {
+fn match_node_label(action: &NodeAction, document: &DiagramDocument) -> String {
     match action {
         NodeAction::Start => NODE_START.to_string(),
         NodeAction::Stop => NODE_END.to_string(),
@@ -156,6 +155,9 @@ fn match_node_label(action: &NodeAction) -> String {
                 c.to_string()
             }
         }
-        NodeAction::Call { .. } => "S".to_string(),
+        NodeAction::Call { target, .. } => document
+            .submachine(*target)
+            .map(|machine| machine.machine().name().chars().take(2).collect())
+            .unwrap_or_else(|| "?".to_owned()),
     }
 }

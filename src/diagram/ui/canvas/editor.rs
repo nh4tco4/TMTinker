@@ -15,7 +15,7 @@ use crate::{
             tool::{BasicActionTools, EditTools, EditorTool},
         },
         model::{
-            document::SubmachineDocument,
+            document::{DiagramDocument, SubmachineDocument},
             layout::{GraphLayout, LayoutPos},
             submachine::Submachine,
         },
@@ -36,12 +36,13 @@ pub fn handle_canvas(
     submachine_document: &mut SubmachineDocument,
     canvas_state: &mut CanvasEditorState,
     current_tool: &EditorTool,
-    alphabet: ValidatedAlphabet,
+    document: &DiagramDocument,
     ctx: &egui::Context,
     ui: &mut egui::Ui,
     node_state: &mut crate::diagram::ui::editor::node_inspector::NodeInspectorState,
     edge_state: &mut crate::diagram::ui::editor::edge_inspector::EdgeInspectorState,
 ) {
+    let alphabet = document.alphabet().clone();
     let CanvasEditorState {
         viewport,
         interaction: canvas_interaction_state,
@@ -51,6 +52,10 @@ pub fn handle_canvas(
 
     if !ctx.wants_keyboard_input() && ctx.memory(|m| m.top_modal_layer().is_none()) {
         for (key, delta) in [
+            (egui::Key::A, LayoutPos::new(-GraphLayout::GRID_SIZE, 0.)),
+            (egui::Key::D, LayoutPos::new(GraphLayout::GRID_SIZE, 0.)),
+            (egui::Key::W, LayoutPos::new(0., -GraphLayout::GRID_SIZE)),
+            (egui::Key::S, LayoutPos::new(0., GraphLayout::GRID_SIZE)),
             (
                 egui::Key::ArrowLeft,
                 LayoutPos::new(-GraphLayout::GRID_SIZE, 0.),
@@ -68,15 +73,21 @@ pub fn handle_canvas(
                 LayoutPos::new(0., GraphLayout::GRID_SIZE),
             ),
         ] {
+            if canvas_interaction_state.selection_state.selected.is_empty() {
+                break;
+            }
             if ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, key)) {
-                for node in canvas_interaction_state
-                    .selection_state
-                    .selected_node_keys()
-                {
-                    if let Some(position) = submachine_document.layout().get_node_position(node) {
-                        submachine_document
-                            .layout_mut()
-                            .set_node_position(node, position + delta);
+                for item in &canvas_interaction_state.selection_state.selected {
+                    match item {
+                        SelectableKey::Node(node) => {
+                            submachine_document.move_node_unsnapped(*node, delta);
+                        }
+                        SelectableKey::Note(note) => {
+                            submachine_document
+                                .layout_mut()
+                                .move_note_unsnapped(*note, delta);
+                        }
+                        SelectableKey::Edge(_) => {}
                     }
                 }
             }
@@ -373,6 +384,21 @@ pub fn handle_canvas(
     }
 
     {
+        // Hit-test the positions we paint, after panning, dragging and snapping.
+        canvas_interaction_state.selection_state.hovered = ctx
+            .input(|i| i.pointer.hover_pos())
+            .filter(|position| rect.contains(*position))
+            .and_then(|position| {
+                compute_hovered_key(
+                    submachine_document.layout(),
+                    viewport,
+                    submachine_document.machine(),
+                    &alphabet,
+                    &rect,
+                    position,
+                    &painter,
+                )
+            });
         render_grid(viewport, rect, &painter);
 
         if let Some(rectangle) = canvas_interaction_state.rect_select.as_ref() {
@@ -399,7 +425,7 @@ pub fn handle_canvas(
         render_nodes(
             submachine_document.layout(),
             submachine_document.machine(),
-            &alphabet,
+            document,
             viewport,
             &canvas_interaction_state.selection_state,
             None,
@@ -456,18 +482,12 @@ fn handle_click(
             }
         }
         EditorTool::Edit(EditTools::Link) => {
-            if canvas_interaction_state.selection_state.selected.len() == 1 {
-                link_tool(
-                    submachine_document,
-                    &mut canvas_interaction_state.link_source,
-                    alphabet,
-                    canvas_interaction_state
-                        .selection_state
-                        .selected
-                        .get(0)
-                        .copied(),
-                );
-            }
+            link_tool(
+                submachine_document,
+                &mut canvas_interaction_state.link_source,
+                alphabet,
+                canvas_interaction_state.selection_state.hovered,
+            );
         }
         EditorTool::Edit(EditTools::Move) => {}
         EditorTool::Submachine(key) => {

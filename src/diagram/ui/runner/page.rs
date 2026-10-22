@@ -1,9 +1,13 @@
 use crate::{
     commands::Command,
-    core::{alphabet::ValidatedAlphabet, tape::Tape},
+    core::tape::Tape,
     diagram::{
         editor::session::{SelectionState, ViewportState, Zoom},
-        model::{document::SubmachineDocument, layout::LayoutPos, submachine::SubmachineKey},
+        model::{
+            document::{DiagramDocument, SubmachineDocument},
+            layout::LayoutPos,
+            submachine::SubmachineKey,
+        },
         runtime::{DiagramRunSession, checks::BatchCheck},
         ui::canvas::render::{
             render_edge::render_edges, render_grid::render_grid, render_node::render_nodes,
@@ -147,7 +151,7 @@ fn runner_canvas(session: &DiagramRunSession, state: &mut RunnerUiState, ctx: &e
                 }
                 render_read_only_canvas(
                     document,
-                    session.compiled().source().alphabet(),
+                    session.compiled().source(),
                     viewport,
                     executing,
                     (active == location.submachine)
@@ -165,7 +169,7 @@ fn runner_canvas(session: &DiagramRunSession, state: &mut RunnerUiState, ctx: &e
 
 pub(crate) fn render_read_only_canvas(
     document: &SubmachineDocument,
-    alphabet: &ValidatedAlphabet,
+    source: &DiagramDocument,
     viewport: &mut ViewportState,
     executing_node: Option<crate::diagram::model::submachine::NodeKey>,
     next_transition: Option<crate::diagram::model::transition::EdgeKey>,
@@ -202,7 +206,7 @@ pub(crate) fn render_read_only_canvas(
     render_edges(
         document.layout(),
         document.machine(),
-        alphabet,
+        source.alphabet(),
         viewport,
         &selection,
         next_transition,
@@ -211,7 +215,7 @@ pub(crate) fn render_read_only_canvas(
     render_nodes(
         document.layout(),
         document.machine(),
-        alphabet,
+        source,
         viewport,
         &selection,
         executing_node,

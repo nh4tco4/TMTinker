@@ -76,13 +76,15 @@ pub fn show(ctx: &egui::Context, open: &mut bool, runner: bool) {
                                     ("Click an item", "Select a node, transition or note and open its inspector"),
                                     ("Shift/⌘+click", "Toggle an item in the selection"),
                                     ("Right mouse drag", "Select nodes and notes inside a rectangle"),
-                                    ("Up / Down / Left / Right", "Move selected nodes by one grid cell"),
+                                    ("WASD / Arrow keys", "Move selected nodes and notes by one grid cell; WASD selects tools when nothing is selected"),
+                                    ("Ctrl/⌘+C / Ctrl/⌘+V", "Copy / paste nodes, notes and their internal transitions within this project; skip submachine calls"),
                                     ("Delete", "Delete selected nodes, transitions and notes; Undo restores them"),
                                     ("X / Delete tool", "Select the deletion tool, then click an item to remove it"),
                                 ]), widths);
                                 group(ui, "Placement", &rows(&[
                                     ("Tool + canvas click", "Place a node or note at the nearest grid point"),
                                     ("Link + source click + target click", "Connect two nodes; select the transition to edit its symbols"),
+                                    ("Link + empty canvas click", "Cancel the pending connection"),
                                     ("Drag a node or note", "Move it, preview the snapped position, and release to snap to the grid"),
                                 ]), widths);
                             }

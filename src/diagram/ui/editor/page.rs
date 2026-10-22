@@ -77,7 +77,7 @@ pub fn diagram_editor_page(
             if original.is_system() {
                 super::super::runner::page::render_read_only_canvas(
                     original,
-                    project.document().alphabet(),
+                    project.document(),
                     &mut editor.canvas_mut(active).viewport,
                     None,
                     None,
@@ -85,11 +85,12 @@ pub fn diagram_editor_page(
                     ui,
                 );
             } else {
+                editor.handle_clipboard(&mut draft, ctx);
                 handle_canvas(
                     &mut draft,
                     editor.canvas_mut(active),
                     &tool,
-                    project.document().alphabet().clone(),
+                    project.document(),
                     ctx,
                     ui,
                     &mut state.nodes,
