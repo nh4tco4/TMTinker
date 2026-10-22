@@ -21,7 +21,9 @@ Build Turing machine diagrams and watch them run on a tape. TMTinker is an edito
 
 ![TMTinker main menu and project library](assets/readme/menu.png)
 
-![TMTinker edtior demonstation](assets/readme/editor.png)
+![TMTinker diagram editor demonstration](assets/readme/editor.png)
+
+![TMTinker tu4 demonstration](assets/readme/tu4.png)
 
 ## Your first machine
 
