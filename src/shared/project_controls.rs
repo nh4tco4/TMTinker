@@ -5,10 +5,9 @@ use crate::{
 };
 
 pub fn control_panel(project: &Project, ui: &mut egui::Ui, commands: &mut Vec<Command>) {
-    ui.heading("Project");
+    ui.heading( if project.is_tu4() {"TU4"} else {"Diagram"});
     ui.add_space(10.);
     ui.label(egui::RichText::new(project.name()).strong());
-    ui.weak(if project.is_tu4() { "TU4" } else { "Diagram" });
     ui.add_space(14.);
     crate::ui::widgets::custom_buttons::centered_tool_grid(ui, "project_controls", |ui| {
         for (index, id) in [
@@ -40,7 +39,7 @@ pub fn control_panel(project: &Project, ui: &mut egui::Ui, commands: &mut Vec<Co
                     match id {
                         CommandId::OpenRunner => "Run",
                         CommandId::Export => "Export",
-                        CommandId::OpenTu4 => "Open in TU4",
+                        CommandId::OpenTu4 => "Into TU4",
                         _ => info.label,
                     },
                     shortcut.as_deref(),

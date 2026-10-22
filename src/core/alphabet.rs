@@ -1,6 +1,6 @@
 use std::{collections::HashSet, sync::LazyLock};
 
-static ALLOWED_CHARACTERS: LazyLock<HashSet<char>> = LazyLock::new(|| {
+pub(crate) static ALLOWED_CHARACTERS: LazyLock<HashSet<char>> = LazyLock::new(|| {
     [
         ' ', '\\', '(', ')', '|', '!', '@', '#', '%', '^', '&', '*', '-', '+', '=', '_', '/', '?',
         '1', '2', '3', '4', '5', '6', '7', '8', '9', '0', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H',

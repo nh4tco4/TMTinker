@@ -2,7 +2,7 @@ use super::menu_background::MenuBackground;
 use crate::{
     app::ProjectKey,
     commands::{Command, CommandId, button},
-    core::alphabet::ValidatedAlphabet,
+    core::alphabet::{ALLOWED_CHARACTERS, ValidatedAlphabet},
     persistence::creation_date,
     project::{Project, model::ProjectName},
 };
@@ -256,6 +256,32 @@ fn new_project_dialog(state: &mut MenuUiState, ctx: &egui::Context, commands: &m
             ui.label("Name");
             ui.text_edit_singleline(&mut state.name);
             ui.label("Alphabet");
+            ui.horizontal_wrapped(|ui| {
+                for (label, symbols) in [
+                    ("Unary", "|"),
+                    ("Binary", "10"),
+                    ("Hexadecimal", "0123456789ABCDEF"),
+                ] {
+                    if ui.small_button(label).on_hover_text(symbols).clicked() {
+                        state.alphabet = symbols.into();
+                        state.error = None;
+                    }
+                }
+                if ui
+                    .small_button("All")
+                    .on_hover_text("All allowed symbols")
+                    .clicked()
+                {
+                    let mut symbols: Vec<_> = ALLOWED_CHARACTERS
+                        .iter()
+                        .copied()
+                        .filter(|&symbol| symbol != ' ')
+                        .collect();
+                    symbols.sort_unstable();
+                    state.alphabet = symbols.into_iter().collect();
+                    state.error = None;
+                }
+            });
             ui.text_edit_singleline(&mut state.alphabet);
             ui.weak("The blank symbol λ is included automatically.");
             if let Some(error) = &state.error {

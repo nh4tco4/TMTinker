@@ -120,9 +120,6 @@ pub fn controls_panel<S: RunSession>(
                             } else {
                                 "Run diagram"
                             });
-                            if crate::commands::icon_button(ui, CommandId::Cheatsheet).clicked() {
-                                commands.push(Command::Invoke(CommandId::Cheatsheet));
-                            }
                         });
                         ui.label(egui::RichText::new(project.name()).strong());
                         ui.add_space(14.);
@@ -143,6 +140,7 @@ pub fn controls_panel<S: RunSession>(
                         ui.checkbox(&mut state.follow_execution, "Follow step execution");
                         ui.label(format!("Status: {:?}", session.status()));
                         ui.label(format!("Steps: {}", session.steps()));
+                        extra(ui, state);
                         if let Some(error) = session.fault() {
                             ui.colored_label(egui::Color32::DARK_RED, error);
                         }
@@ -153,7 +151,7 @@ pub fn controls_panel<S: RunSession>(
                             ui,
                             "runner_menu",
                             |ui| {
-                                for (i, id) in [CommandId::BackToEditor, CommandId::Save]
+                                for (i, id) in [CommandId::BackToEditor, CommandId::Save, CommandId::Cheatsheet]
                                     .into_iter()
                                     .enumerate()
                                 {
@@ -179,7 +177,6 @@ pub fn controls_panel<S: RunSession>(
                                 }
                             },
                         );
-                        extra(ui, state);
                     });
             });
         });
@@ -203,8 +200,6 @@ pub fn tests_panel<S: RunSession>(
                     .id_salt("tests_scroll")
                     .show(ui, |ui| {
                         ui.heading("Tests");
-                        ui.weak("Load a tape, then press Run.");
-                        ui.add_space(12.);
                         for slot in 0..6 {
                             ui.push_id(slot, |ui| {
                                 egui::Frame::new()
@@ -309,7 +304,6 @@ pub fn tests_panel<S: RunSession>(
                                 group: None,
                             });
                         }
-                        ui.weak("Compare tape contents relative to the head.");
                     });
             });
         });
@@ -475,7 +469,6 @@ pub fn test_dialog<S: RunSession>(
             state.expected_draft = TapeDraft::from_tape(session.tape());
         }
         notation_hint(ui);
-        ui.weak("Editing a tape restarts execution with the edited tape.");
         if let Some(error) = &state.test_error {
             ui.colored_label(egui::Color32::DARK_RED, error);
         }
