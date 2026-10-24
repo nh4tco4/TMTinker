@@ -134,7 +134,13 @@ impl RunSession for Tu4RunSession {
             Action::Left => self.tape.move_left(),
             Action::Right => self.tape.move_right(),
             Action::Halt => self.status = RunStatus::Halted,
-            Action::Write(symbol) => self.tape.write(symbol),
+            Action::Write(symbol) => {
+                if symbol == command.read && command.next == self.state {
+                    self.status = RunStatus::Halted;
+                } else {
+                    self.tape.write(symbol);
+                }
+            }
         }
         if self.status != RunStatus::Halted {
             self.state = command.next;

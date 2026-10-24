@@ -410,7 +410,7 @@ pub fn cheatsheet(ctx: &egui::Context, open: &mut bool) {
         ui.monospace("state, symbol, action, next state");
         ui.monospace("1,λ,>,2\n2,λ,1,3\n3,1,~,0");
         ui.label("Use < to move left, > to move right, and ~ to halt. Write an alphabet symbol to replace the current cell. Use λ or a space for blank, and // for comments.");
-        ui.label("State numbers range from 0 to 4294967295. Execution starts at the state of the first command. Halt ignores the fourth field. Writing the same symbol in the same state continues execution.");
+        ui.label("State numbers range from 0 to 4294967295. Execution starts at the state of the first command. Halt ignores the fourth field. Writing the same symbol and staying in the same state halts successfully without changing the tape or head position.");
         ui.separator();
         ui.label("Run starts execution; Pause suspends it. Step executes one command. Reset restores the initial tape and state; Stop ends execution. Editor unlocks the source text.");
         ui.label("Click the circle beside a command to toggle a breakpoint. Execution pauses before that command; Run continues past the current stop and pauses at the next breakpoint. Step crosses a breakpoint. Breakpoints are saved with the project.");

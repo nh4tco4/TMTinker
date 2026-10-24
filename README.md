@@ -47,7 +47,7 @@ Write one command per line as `state,symbol,action,next_state`. For an empty tap
 3,1,~,0 // halt; ignore the fourth field
 ```
 
-Use `<` for left, `>` for right, and `~` for halt. Other actions write a symbol from the project alphabet; `#` and `=` are ordinary symbols. Use `λ` or a literal space for blank. State numbers are unsigned 32-bit integers, and execution starts in the state of the first command. Writing the same symbol and staying in the same state continues the loop.
+Use `<` for left, `>` for right, and `~` for halt. Other actions write a symbol from the project alphabet; `#` and `=` are ordinary symbols. Use `λ` or a literal space for blank. State numbers are unsigned 32-bit integers, and execution starts in the state of the first command. Writing the same symbol and staying in the same state halts successfully, leaving the tape and head unchanged.
 
 **Run** compiles the source and locks editing until you return with **Editor**. The runner shares the diagram's tape controls and six test slots. **Run without delay** executes batches while keeping Pause available. Sources above 2,500 lines use a paged editor and display the current state and line number during execution. Saving and JSON export include the source text, comments, prepared tape and tests, including drafts that do not compile yet.
 

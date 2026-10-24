@@ -63,13 +63,60 @@ fn sparse_u32_states_comments_blanks_and_source_lines() {
 }
 
 #[test]
-fn same_symbol_same_state_loops_and_missing_commands_fault() {
-    let mut run = session("0,λ,λ,0");
+fn same_symbol_same_state_halts_without_changing_tape() {
+    for source in ["7,λ,λ,7", "7, , ,7", "7,1,1,7"] {
+        for running in [false, true] {
+            let mut run = session(source);
+            let tape = if source.contains('1') {
+                Tape::from_text("0(1)0", -4, &alphabet()).unwrap()
+            } else {
+                Tape::from_text("0( )1", -4, &alphabet()).unwrap()
+            };
+            run.replace_tape(tape.clone());
+            if running {
+                run.run();
+            }
+            run.step();
+            assert_eq!(run.status(), RunStatus::Halted, "{source}");
+            assert_eq!(run.steps(), 1);
+            assert_eq!(run.state_number(), 7);
+            assert_eq!(run.tape(), &tape);
+            assert_eq!(run.fault(), None);
+            run.step();
+            assert_eq!(run.steps(), 1);
+            run.reset();
+            assert_eq!(run.status(), RunStatus::Paused);
+            assert_eq!(run.steps(), 0);
+            run.step();
+            assert_eq!(run.status(), RunStatus::Halted);
+        }
+    }
+}
+
+#[test]
+fn changing_symbol_or_state_and_moving_do_not_halt() {
+    let mut run = session("7,λ,1,7\n7,1,1,7");
+    run.step();
+    assert_eq!(run.status(), RunStatus::Paused);
+    assert_eq!(run.tape().read(), '1');
+    run.step();
+    assert_eq!(run.status(), RunStatus::Halted);
+
+    let mut run = session("7,λ,λ,8\n8,λ,λ,7");
     for _ in 0..10 {
         run.step();
+        assert_eq!(run.status(), RunStatus::Paused);
     }
-    assert_eq!(run.steps(), 10);
-    assert_eq!(run.status(), RunStatus::Paused);
+    for action in ['<', '>'] {
+        let mut run = session(&format!("7,λ,{action},7"));
+        run.step();
+        assert_eq!(run.status(), RunStatus::Paused);
+        assert_ne!(run.tape().head_position(), 0);
+    }
+}
+
+#[test]
+fn missing_commands_fault() {
     let mut run = session("0,λ,<,1\n1,1,~,0");
     run.step();
     assert_eq!(run.tape().head_position(), -1);
@@ -166,7 +213,7 @@ fn shared_checks_report_pass_failure_fault_and_limit() {
         })
     });
     let mut checks = BatchCheck::<Tu4RunSession>::new(
-        compile::compile("0,λ,λ,0", &alphabet()).expect("loop compiles"),
+        compile::compile("0,λ,>,0", &alphabet()).expect("loop compiles"),
         tests,
         17,
     );
@@ -178,6 +225,30 @@ fn shared_checks_report_pass_failure_fault_and_limit() {
             .results
             .iter()
             .all(|result| *result == Some(TestResult::StepLimitReached))
+    );
+}
+
+#[test]
+fn shared_checks_accept_same_symbol_same_state_as_completion() {
+    let tests = std::array::from_fn(|_| {
+        Some(TestCase {
+            initial_tape: Tape::new(),
+            expected_tape: Tape::new(),
+        })
+    });
+    let mut checks = BatchCheck::<Tu4RunSession>::new(
+        compile::compile("7,λ,λ,7", &alphabet()).unwrap(),
+        tests,
+        1,
+    );
+    while !checks.is_done() {
+        checks.tick();
+    }
+    assert!(
+        checks
+            .results
+            .iter()
+            .all(|result| { *result == Some(TestResult::Passed { steps: 1 }) })
     );
 }
 
