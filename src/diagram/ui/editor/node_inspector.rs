@@ -7,7 +7,6 @@ use std::num::NonZeroU32;
 use crate::{
     core::alphabet::ValidatedAlphabet,
     diagram::editor::session::ViewportState,
-    diagram::model::layout::LayoutPos,
     diagram::model::node::{Direction, Node, NodeAction},
     diagram::ui::editor::descriptions::*,
     diagram::{
@@ -47,8 +46,9 @@ pub fn node_options_base(
     window_pos: egui::Pos2,
     state: &mut NodeInspectorState,
 ) {
-    let shift = LayoutPos::new(NODE_SIZE, NODE_SIZE) * viewport.camera_zoom.get();
-    let new_pos = viewport.screen_to_world(shift + window_pos.into());
+    // Both the node position and egui window position are in screen coordinates.
+    let shift = egui::Vec2::splat(NODE_SIZE * viewport.camera_zoom.get());
+    let new_pos = window_pos + shift;
 
     let problems = node_problems(submachine, alphabet, node_key);
 
@@ -230,4 +230,69 @@ fn select_all(ctx: &egui::Context, edit_id: Id, char_count: usize) {
 
 fn show_description(ui: &mut egui::Ui, description: &'static str) {
     ui.label(description);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::diagram::{
+        editor::session::Zoom,
+        model::{document::DiagramDocument, layout::LayoutPos},
+    };
+
+    #[test]
+    fn inspector_stays_next_to_node_after_zoom_and_pan() {
+        let alphabet = ValidatedAlphabet::new([' ', '0', '1']).unwrap();
+        let mut document = DiagramDocument::new(alphabet.clone());
+        let machine = document
+            .submachine_mut(document.entry_submachine())
+            .unwrap();
+        let position = LayoutPos::new(400., 300.);
+        let node = machine.add_node(position, NodeAction::Start);
+        let mut state = NodeInspectorState::default();
+        let ctx = egui::Context::default();
+
+        for (zoom, pan, expected) in [
+            (1., (0., 0.), egui::pos2(460., 360.)),
+            (0.5, (200., 100.), egui::pos2(430., 280.)),
+            (2., (-200., -100.), egui::pos2(720., 620.)),
+            (0.25, (300., 200.), egui::pos2(415., 290.)),
+        ] {
+            let viewport = ViewportState {
+                camera_pan: LayoutPos::new(pan.0, pan.1),
+                camera_zoom: Zoom::new(zoom),
+            };
+            // Reuse the window so camera changes also update an open inspector.
+            for _ in 0..2 {
+                let _ = ctx.run(
+                    egui::RawInput {
+                        screen_rect: Some(egui::Rect::from_min_size(
+                            egui::Pos2::ZERO,
+                            egui::vec2(2000., 1600.),
+                        )),
+                        ..Default::default()
+                    },
+                    |ctx| {
+                        node_options_base(
+                            &viewport,
+                            machine.machine_mut(),
+                            &alphabet,
+                            ctx,
+                            node,
+                            viewport.world_to_screen(position).into(),
+                            &mut state,
+                        );
+                    },
+                );
+            }
+            let rect = ctx
+                .memory(|memory| memory.area_rect(Id::new(("node_options", node))))
+                .expect("inspector window should be visible");
+            assert!(
+                rect.min.distance(expected) < 1.,
+                "zoom {zoom}, pan {pan:?}: expected {expected:?}, got {:?}",
+                rect.min,
+            );
+        }
+    }
 }
