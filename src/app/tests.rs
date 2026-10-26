@@ -1863,8 +1863,14 @@ fn canvas_copy_paste_remaps_edges_and_notes_within_one_project() {
         vec![egui::Event::Paste(marker.clone())],
     );
     let machine = app.projects[key].document().submachine(child).unwrap();
-    assert_eq!(machine.machine().nodes_iter().count(), 2);
+    assert_eq!(machine.machine().nodes_iter().count(), 3);
     assert_eq!(machine.machine().edges_iter().count(), 1);
+    assert!(machine.machine().nodes_iter().any(|(_, node)| {
+        matches!(node.action(), NodeAction::Call { target, .. } if *target == child)
+    }));
+    let document = app.projects.get(key).expect("copied project").document();
+    assert!(document.validate().is_ok());
+    assert!(crate::diagram::compile::compile(document).is_err());
     let edge = machine.machine().edges_iter().next().unwrap().1;
     assert!(edge.inverse());
     assert_eq!(
@@ -1916,7 +1922,7 @@ fn canvas_copy_paste_remaps_edges_and_notes_within_one_project() {
             .machine()
             .nodes_iter()
             .count(),
-        2
+        3
     );
     frame(
         &mut app,
@@ -1934,7 +1940,7 @@ fn canvas_copy_paste_remaps_edges_and_notes_within_one_project() {
             .machine()
             .nodes_iter()
             .count(),
-        4
+        6
     );
     let other = app.projects.insert(fixture(false));
     app.open(other).unwrap();

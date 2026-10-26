@@ -500,7 +500,7 @@ fn conversion_preserves_nested_repeated_calls_and_pre_call_return_branch() {
 }
 
 #[test]
-fn recursion_is_rejected_by_edits_import_and_compiler() {
+fn recursion_is_editable_and_persisted_but_rejected_by_compiler() {
     let mut document = DiagramDocument::new(alphabet());
     let main = document.entry_submachine();
     let child = document.add_submachine(SubmachineName::parse("Child".into()).expect("name"));
@@ -534,17 +534,24 @@ fn recursion_is_rejected_by_edits_import_and_compiler() {
                 },
                 None
             )
-            .is_err()
+            .is_ok()
     );
+    assert!(project.data() != &before);
+    assert!(project.undo());
     assert!(project.data() == &before);
+    assert!(project.redo());
+    assert!(project.document().validate_calls().is_err());
     document.replace_submachine(child, draft).expect("replace");
-    assert!(document.validate_calls().is_err());
+    assert_eq!(
+        document.validate_calls().expect_err("cycle"),
+        "Recursive submachine calls are not allowed: Main machine -> Child -> Main machine"
+    );
     assert!(compile_diagram(&document).is_err());
     assert!(convert::convert(&document).is_err());
     let invalid = Project::new(ProjectName::new("Cycle".into()).expect("name"), document);
     assert!(
         persistence::decode_project(&persistence::encode_project(&invalid).expect("encode"))
-            .is_err()
+            .is_ok()
     );
     let mut direct = DiagramDocument::new(alphabet());
     let key = direct.entry_submachine();
@@ -556,7 +563,12 @@ fn recursion_is_rejected_by_edits_import_and_compiler() {
             repeat: 1.try_into().expect("positive"),
         },
     );
-    assert!(direct.validate_calls().is_err());
+    assert_eq!(
+        direct.validate_calls().expect_err("self call"),
+        "Recursive submachine calls are not allowed: Main machine -> Main machine"
+    );
+    assert!(direct.validate().is_ok());
+    assert!(compile_diagram(&direct).is_err());
 }
 
 #[test]

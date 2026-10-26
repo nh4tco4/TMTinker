@@ -231,7 +231,7 @@ impl Project {
             ProjectEdit::ReplaceMachine { key, machine } => {
                 let document = self.data.document.diagram_mut()?;
                 document.replace_submachine(key, *machine)?;
-                if let Err(error) = document.validate_calls() {
+                if let Err(error) = document.validate() {
                     self.data = before;
                     return Err(error);
                 }

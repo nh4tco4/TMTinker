@@ -24,10 +24,7 @@ impl CanvasClipboard {
         let nodes: Vec<_> = document
             .machine()
             .nodes_iter()
-            .filter(|(key, node)| {
-                selection.is_selected(&SelectableKey::Node(*key))
-                    && !matches!(node.action(), NodeAction::Call { .. })
-            })
+            .filter(|(key, _)| selection.is_selected(&SelectableKey::Node(*key)))
             .filter_map(|(key, node)| {
                 Some((
                     key,
@@ -129,5 +126,82 @@ pub fn handle_clipboard(
     }
     if paste && let Some(clipboard) = clipboard {
         clipboard.paste(document, selection);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        CanvasClipboard, GraphLayout, LayoutPos, NodeAction, SelectableKey, SelectionState,
+    };
+    use crate::{
+        core::alphabet::ValidatedAlphabet,
+        diagram::{
+            compile::compile,
+            model::{document::DiagramDocument, submachine::SubmachineName},
+        },
+    };
+
+    #[test]
+    fn call_only_selection_pastes_shared_references_in_any_submachine() {
+        let mut document =
+            DiagramDocument::new(ValidatedAlphabet::new([' ', '0', '1']).expect("alphabet"));
+        let main = document.entry_submachine();
+        let child = document.add_submachine(SubmachineName::parse("L".into()).expect("name"));
+        let other = document.add_submachine(SubmachineName::parse("Other".into()).expect("name"));
+        let action = NodeAction::Call {
+            target: child,
+            repeat: 3.try_into().expect("positive"),
+        };
+        let position = LayoutPos::new(150., 225.);
+        let machine = document.submachine_mut(main).expect("main");
+        let original = machine.add_node(position, action.clone());
+        let mut selection = SelectionState::default();
+        selection.selected.push(SelectableKey::Node(original));
+        let mut clipboard = CanvasClipboard::copy(machine, &selection).expect("copy call alone");
+
+        for (index, destination) in [main, other, child].into_iter().enumerate() {
+            let machine = document.submachine_mut(destination).expect("destination");
+            clipboard.paste(machine, &mut selection);
+            let [SelectableKey::Node(pasted)] = selection.selected.as_slice() else {
+                panic!("paste should select the new call node");
+            };
+            assert_eq!(
+                machine
+                    .machine()
+                    .get_node(*pasted)
+                    .expect("pasted")
+                    .action(),
+                &action
+            );
+            assert_eq!(
+                machine.layout().get_node_position(*pasted),
+                Some(
+                    position
+                        + LayoutPos::new(
+                            GraphLayout::GRID_SIZE * (index + 1) as f32,
+                            GraphLayout::GRID_SIZE * (index + 1) as f32,
+                        )
+                )
+            );
+            if destination == main {
+                assert_ne!(*pasted, original);
+                assert_eq!(machine.machine().nodes_iter().count(), 2);
+            }
+            document.validate().expect("editable document");
+            if destination != child {
+                document
+                    .validate_calls()
+                    .expect("shared calls are not recursive");
+            }
+        }
+        assert_eq!(document.submachines().count(), 3);
+        assert!(
+            compile(&document)
+                .err()
+                .expect("recursive call")
+                .to_string()
+                .contains("L -> L")
+        );
     }
 }

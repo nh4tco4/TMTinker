@@ -179,45 +179,71 @@ impl DiagramDocument {
     }
 
     pub fn validate_calls(&self) -> Result<(), String> {
-        use std::collections::{HashMap, VecDeque};
+        use std::collections::{HashMap, HashSet};
 
-        let mut incoming: HashMap<_, usize> = self.submachines().map(|(key, _)| (key, 0)).collect();
         let mut calls: HashMap<_, Vec<_>> = HashMap::new();
         for (key, document) in self.submachines() {
+            let targets = calls.entry(key).or_default();
             for (_, node) in document.machine().nodes_iter() {
                 if let NodeAction::Call { target, .. } = node.action() {
-                    *incoming
-                        .get_mut(target)
-                        .ok_or("Missing called submachine")? += 1;
-                    calls.entry(key).or_default().push(*target);
-                }
-            }
-        }
-        let mut ready: VecDeque<_> = incoming
-            .iter()
-            .filter_map(|(&key, &count)| (count == 0).then_some(key))
-            .collect();
-        let mut visited = 0;
-        while let Some(key) = ready.pop_front() {
-            visited += 1;
-            if let Some(targets) = calls.get(&key) {
-                for target in targets {
-                    let count = incoming.get_mut(target).expect("call target was checked");
-                    *count -= 1;
-                    if *count == 0 {
-                        ready.push_back(*target);
+                    if self.submachine(*target).is_none() {
+                        return Err("Missing called submachine".into());
                     }
+                    targets.push(*target);
                 }
             }
         }
-        if visited != incoming.len() {
-            return Err("Recursive submachine calls are not allowed".into());
+        let mut visited = HashSet::new();
+        for (root, _) in self.submachines() {
+            if visited.contains(&root) {
+                continue;
+            }
+            let mut path = vec![root];
+            let mut active = HashMap::from([(root, 0)]);
+            let mut stack = vec![(
+                root,
+                calls.get(&root).expect("submachine was indexed").iter(),
+            )];
+            while let Some((key, targets)) = stack.last_mut() {
+                if let Some(&target) = targets.next() {
+                    if let Some(&start) = active.get(&target) {
+                        let cycle = path
+                            .iter()
+                            .skip(start)
+                            .chain(std::iter::once(&target))
+                            .map(|key| {
+                                self.submachine(*key)
+                                    .expect("call target was checked")
+                                    .machine()
+                                    .name()
+                            })
+                            .collect::<Vec<_>>()
+                            .join(" -> ");
+                        return Err(format!(
+                            "Recursive submachine calls are not allowed: {cycle}"
+                        ));
+                    }
+                    if !visited.contains(&target) {
+                        active.insert(target, path.len());
+                        path.push(target);
+                        stack.push((
+                            target,
+                            calls.get(&target).expect("call target was checked").iter(),
+                        ));
+                    }
+                } else {
+                    visited.insert(*key);
+                    active.remove(key);
+                    path.pop();
+                    stack.pop();
+                }
+            }
         }
         Ok(())
     }
 
+    // Editable documents may contain call cycles; compilation validates the call graph.
     pub fn validate(&self) -> Result<(), String> {
-        self.validate_calls()?;
         ValidatedAlphabet::new(self.alphabet.iter().copied()).map_err(|e| e.to_string())?;
         if self.submachine(self.entry_submachine).is_none() {
             return Err("Missing main machine".into());
