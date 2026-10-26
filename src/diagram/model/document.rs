@@ -27,6 +27,13 @@ impl SubmachineDocument {
         }
     }
 
+    pub(super) fn new_system(name: &str) -> Self {
+        let mut document =
+            Self::new(SubmachineName::parse(name.to_owned()).expect("built-in name is valid"));
+        document.system = true;
+        document
+    }
+
     pub fn machine(&self) -> &Submachine {
         &self.machine
     }
@@ -109,6 +116,26 @@ impl DiagramDocument {
             submachines,
             entry_submachine,
         }
+    }
+
+    pub fn new_with_builtins(alphabet: ValidatedAlphabet) -> Self {
+        use super::{builtins, node::Direction};
+
+        let mut document = Self::new(alphabet);
+        let left = document.submachines.insert(builtins::move_word(
+            "L",
+            Direction::Left,
+            &document.alphabet,
+        ));
+        let right = document.submachines.insert(builtins::move_word(
+            "R",
+            Direction::Right,
+            &document.alphabet,
+        ));
+        document
+            .submachines
+            .insert(builtins::copy_word(left, right, &document.alphabet));
+        document
     }
 
     pub fn submachine(&self, key: SubmachineKey) -> Option<&SubmachineDocument> {

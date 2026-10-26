@@ -1,3 +1,4 @@
+mod builtins;
 pub mod document;
 pub mod layout;
 pub mod node;

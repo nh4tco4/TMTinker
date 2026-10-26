@@ -2607,3 +2607,67 @@ fn tu4_follow_keeps_the_last_command_stable_with_space_below() {
         );
     }
 }
+
+#[test]
+fn diagram_creation_option_adds_protected_builtins_and_preserves_them_on_reload() {
+    for include_builtins in [true, false] {
+        let ctx = egui::Context::default();
+        let mut app = App::new(&eframe::CreationContext::_new_kittest(ctx.clone()));
+        app.dispatch(
+            Command::Create {
+                name: ProjectName::new("Built-ins".into()).expect("valid project name"),
+                alphabet: ValidatedAlphabet::new([' ', '0', '1']).expect("valid alphabet"),
+                include_builtins,
+            },
+            &egui::Context::default(),
+        )
+        .expect("project creation succeeds");
+        let project = app.project().expect("created project is open");
+        assert_eq!(
+            project.document().submachines().count(),
+            if include_builtins { 4 } else { 1 }
+        );
+        let mut restored = persistence::decode_project(
+            &persistence::encode_project(project).expect("project encodes"),
+        )
+        .expect("project decodes");
+        assert!(restored.document() == project.document());
+        let builtins: Vec<_> = restored
+            .document()
+            .submachines()
+            .filter(|(_, machine)| machine.is_system())
+            .map(|(key, machine)| (key, machine.clone()))
+            .collect();
+        assert_eq!(builtins.len(), if include_builtins { 3 } else { 0 });
+        for (key, machine) in builtins {
+            assert!(
+                restored
+                    .execute(ProjectEdit::RemoveMachine(key), None)
+                    .is_err()
+            );
+            assert!(
+                restored
+                    .execute(
+                        ProjectEdit::RenameMachine {
+                            key,
+                            name: SubmachineName::parse("Changed".into())
+                                .expect("valid machine name"),
+                        },
+                        None
+                    )
+                    .is_err()
+            );
+            assert!(
+                restored
+                    .execute(
+                        ProjectEdit::ReplaceMachine {
+                            key,
+                            machine: Box::new(machine),
+                        },
+                        None
+                    )
+                    .is_err()
+            );
+        }
+    }
+}

@@ -159,6 +159,7 @@ pub enum Command {
     Create {
         name: ProjectName,
         alphabet: ValidatedAlphabet,
+        include_builtins: bool,
     },
     CreateTu4 {
         name: ProjectName,

@@ -15,6 +15,7 @@ pub struct MenuUiState {
     name: String,
     alphabet: String,
     tu4: bool,
+    include_builtins: bool,
     error: Option<String>,
     background: MenuBackground,
 }
@@ -26,6 +27,7 @@ impl Default for MenuUiState {
             name: String::new(),
             alphabet: "01".into(),
             tu4: false,
+            include_builtins: true,
             error: None,
             background: MenuBackground::default(),
         }
@@ -284,6 +286,12 @@ fn new_project_dialog(state: &mut MenuUiState, ctx: &egui::Context, commands: &m
             });
             ui.text_edit_singleline(&mut state.alphabet);
             ui.weak("The blank symbol λ is included automatically.");
+            if !state.tu4 {
+                ui.checkbox(
+                    &mut state.include_builtins,
+                    "Add built-in machines (Copy, L, R)",
+                );
+            }
             if let Some(error) = &state.error {
                 ui.colored_label(Color32::from_rgb(180, 45, 50), error);
             }
@@ -305,7 +313,11 @@ fn new_project_dialog(state: &mut MenuUiState, ctx: &egui::Context, commands: &m
                         Ok::<_, String>(if state.tu4 {
                             Command::CreateTu4 { name, alphabet }
                         } else {
-                            Command::Create { name, alphabet }
+                            Command::Create {
+                                name,
+                                alphabet,
+                                include_builtins: state.include_builtins,
+                            }
                         })
                     })();
                     match result {
@@ -313,6 +325,7 @@ fn new_project_dialog(state: &mut MenuUiState, ctx: &egui::Context, commands: &m
                             commands.push(command);
                             state.new_project_open = false;
                             state.name.clear();
+                            state.include_builtins = true;
                             state.error = None;
                         }
                         Err(error) => state.error = Some(error),

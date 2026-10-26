@@ -8,11 +8,18 @@ impl App {
             return Ok(());
         }
         match command {
-            Command::Create { name, alphabet } => {
-                let key = self.projects.insert(Project::new(
-                    name,
-                    crate::diagram::model::document::DiagramDocument::new(alphabet),
-                ));
+            Command::Create {
+                name,
+                alphabet,
+                include_builtins,
+            } => {
+                use crate::diagram::model::document::DiagramDocument;
+                let document = if include_builtins {
+                    DiagramDocument::new_with_builtins(alphabet)
+                } else {
+                    DiagramDocument::new(alphabet)
+                };
+                let key = self.projects.insert(Project::new(name, document));
                 self.dirty = true;
                 self.save_requested = true;
                 self.open(key)?;
